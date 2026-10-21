@@ -11,7 +11,7 @@
 import { api, pengguna, MODE_TIRUAN } from '../api.js';
 import { esc, jam, tanggalPanjang, jamBerjalan, inisial } from '../ui.js';
 import { pasangKerangka } from '../kerangka.js';
-import { KARTU, TOMBOL_NAV, kartuAngka } from '../tabel.js';
+import { KARTU, TOMBOL_NAV, kartuAngka, rincianLokasi } from '../tabel.js';
 
 const IKON_KIRI = `
   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9"
@@ -97,7 +97,7 @@ function pesanBelumAbsen(libur, total) {
 // ── Admin ───────────────────────────────────────────────────────────────────
 
 function dashboardAdmin(isi, p) {
-  const hariIni = new Date().toISOString().slice(0, 10);
+  const hariIni = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Jakarta' });
   let aktif = hariIni;
   let hidup = true;
 
@@ -179,6 +179,14 @@ function dashboardAdmin(isi, p) {
 
     const r = d.ringkasan;
     const libur = d.keterangan_libur;
+    // Aktivitas luar kantor dengan GPS kasar diberi catatan kecil. Jangan
+    // dihitung sebagai pelanggaran: akurasi bukan bukti, dan menuduh orang
+    // berdasarkan angka ±100 m justru lebih berbahaya daripada membiarkannya.
+    const adaGpsKasar = d.aktivitas.some(
+      (a) =>
+        (a.mode === 'luar' || a.lokasi === 'Dinas luar' || a.lokasi === 'Luar kantor') &&
+        (a.lokasi_meragukan || !Number.isFinite(a.akurasi) || a.akurasi > 50),
+    );
 
     kotak.innerHTML = `
       ${
@@ -273,6 +281,16 @@ function dashboardAdmin(isi, p) {
       <section class="${KARTU} mt-6">
         <h3 class="text-lg font-semibold tracking-tight text-ink">Aktivitas terbaru</h3>
         <p class="mt-1 text-sm text-muted">Enam catatan terakhir pada tanggal ini.</p>
+
+        ${
+          adaGpsKasar
+            ? `<p class="mt-3 flex items-start gap-2.5 rounded-xl border border-amber-500/25 bg-amber-500/10 px-3.5 py-2.5 text-xs text-amber-900">
+                 <span class="mt-0.5 grid size-4 shrink-0 place-items-center rounded-full bg-amber-500/20 font-semibold">!</span>
+                 <span>Ada absen dinas luar dengan akurasi GPS rendah. Titik dan alamatnya bisa meleset — buka <span class="font-medium">Peta</span> untuk memeriksa titik aslinya.</span>
+               </p>`
+            : ''
+        }
+
         <div class="mt-4">
           ${
             d.aktivitas.length === 0
@@ -285,7 +303,7 @@ function dashboardAdmin(isi, p) {
                        ${avatar(a.nama, a.foto, 'size-10')}
                        <span class="min-w-0 flex-1">
                          <span class="block truncate text-sm font-medium text-ink">${esc(a.nama)}</span>
-                         <span class="block truncate text-xs text-muted">${esc(a.lokasi ?? '—')}</span>
+                         <span class="block text-xs text-muted">${rincianLokasi(a, { ringkas: true })}</span>
                        </span>
                        <span class="shrink-0 text-right">
                          <span class="inline-block rounded-full px-2.5 py-0.5 text-xs font-medium ${
@@ -301,6 +319,13 @@ function dashboardAdmin(isi, p) {
                  </ul>`
           }
         </div>
+
+        <p class="mt-3 border-t border-ink/8 pt-3 text-xs text-muted">
+          Jarak dihitung server dari titik kantor dan dicatat sebagai keterangan; absen dinas luar
+          tetap diterima di mana pun. Akurasi GPS adalah perkiraan, bukan jaminan — angka ± yang
+          besar berarti titiknya bisa meleset puluhan sampai ratusan meter. Alamat &amp; peta:
+          © OpenStreetMap contributors.
+        </p>
       </section>
 
       ${

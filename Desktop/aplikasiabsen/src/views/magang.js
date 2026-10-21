@@ -251,7 +251,7 @@ export default {
           {
             nama: 'pin',
             label: baru ? 'PIN kiosk' : 'PIN baru',
-            jenis: 'teks',
+            jenis: 'sandi',
             wajib: baru,
             contoh: '4 sampai 6 angka',
             petunjuk: baru

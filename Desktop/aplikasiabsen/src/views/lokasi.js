@@ -45,6 +45,22 @@ export default {
           </span>`,
       },
       {
+        judul: 'Titik kantor',
+        sel: (l) => {
+          if (!Number.isFinite(l.lintang) || !Number.isFinite(l.bujur)) {
+            return `<span class="text-xs font-medium text-amber-700">Belum diatur</span>`;
+          }
+          return `
+            <a href="https://www.openstreetmap.org/?mlat=${l.lintang}&mlon=${l.bujur}#map=18/${l.lintang}/${l.bujur}"
+               target="_blank" rel="noopener"
+               title="Buka titik kantor di OpenStreetMap"
+               class="block font-mono text-xs text-merek underline-offset-2 hover:underline">
+              ${l.lintang}, ${l.bujur}
+            </a>
+            <span class="mt-0.5 block text-xs text-muted">Radius ${l.radius_m ?? 50} m</span>`;
+        },
+      },
+      {
         judul: 'Anak magang',
         sel: (l) => `<span class="text-muted">${l.jumlah_magang} orang</span>`,
       },
@@ -102,6 +118,39 @@ export default {
             jenis: 'teks',
             lebar: 'penuh',
             contoh: 'Jl. Industri Raya No. 8, Cikarang',
+          },
+          {
+            nama: 'lintang',
+            label: 'Lintang',
+            jenis: 'angka',
+            wajib: true,
+            langkah: 'any',
+            min: -90,
+            max: 90,
+            contoh: '-6.224600',
+            petunjuk: 'Titik kantor dipakai server untuk menghitung jarak absen. Buka Google Maps, klik kanan titik kantor, lalu salin angka pertama.',
+          },
+          {
+            nama: 'bujur',
+            label: 'Bujur',
+            jenis: 'angka',
+            wajib: true,
+            langkah: 'any',
+            min: -180,
+            max: 180,
+            contoh: '106.809400',
+            petunjuk: 'Angka kedua dari Google Maps. Jangan tertukar dengan lintang.',
+          },
+          {
+            nama: 'radius_m',
+            label: 'Radius area kantor (meter)',
+            jenis: 'angka',
+            wajib: true,
+            langkah: '1',
+            min: 1,
+            max: 5000,
+            contoh: '50',
+            petunjuk: 'Pembanding area kantor. Absen dinas luar tetap diterima di luar radius; jaraknya dicatat untuk admin. Bawaan 50 m.',
           },
           {
             nama: 'aktif',

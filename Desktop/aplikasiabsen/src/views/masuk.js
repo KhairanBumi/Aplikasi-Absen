@@ -1,4 +1,4 @@
-import { api, simpanSesi, MODE_TIRUAN } from '../api.js';
+import { api, simpanSesi } from '../api.js';
 import { tampilkanGalat, sembunyikanGalat, beritahu, jamBerjalan, KELAS_ISIAN } from '../ui.js';
 
 const IKON_MEREK = `
@@ -22,12 +22,6 @@ const IKON_MUTAR = `
     <path d="M12 3a9 9 0 0 1 9 9" stroke="currentColor" stroke-width="3" stroke-linecap="round" />
   </svg>`;
 
-const IKON_AKUN = `
-  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9"
-       stroke-linecap="round" stroke-linejoin="round" class="size-4" aria-hidden="true">
-    <path d="M5 12h14" /><path d="M13 6l6 6-6 6" />
-  </svg>`;
-
 // Pil penuh, sama seperti tombol di seluruh aplikasi. `active:scale` itu umpan
 // balik tekan — di kiosk yang memakai keyboard, ini yang membuat tombolnya
 // terasa merespons.
@@ -35,18 +29,6 @@ const KELAS_TOMBOL =
   'flex w-full cursor-pointer items-center justify-center gap-2 rounded-full bg-merek px-5 py-3.5 ' +
   'font-medium text-white shadow-naik transition duration-200 ease-apple hover:bg-merek-gelap ' +
   'active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-55 disabled:active:scale-100';
-
-// Akun demo hanya ditampilkan saat backend belum tersambung.
-//
-// Isinya cuma admin, dan itu memang seharusnya: akun anak magang tidak dibawa
-// dari awal — admin yang membuatnya lewat Data Master. Dulu ada satu akun
-// magang contoh di sini; setelah datanya dikosongkan akun itu tidak bisa
-// dipakai masuk lagi, dan tombol yang selalu gagal lebih membingungkan
-// daripada tidak ada tombol sama sekali.
-//
-// Masuk memakai NIP + PIN, bukan email + kata sandi. PIN-nya sama dengan yang
-// dipakai absen di kiosk, jadi tidak ada rahasia kedua yang perlu dihafal.
-const AKUN_DEMO = [{ label: 'Admin', nip: 'ADM001', pin: '1111' }];
 
 export default {
   judul: 'Masuk',
@@ -97,37 +79,6 @@ export default {
                 <span data-label>Masuk</span>
               </button>
             </form>
-
-            ${
-              MODE_TIRUAN
-                ? `<div class="mt-6 border-t border-ink/10 pt-5">
-                     <p class="mb-2.5 text-xs font-semibold tracking-wide text-muted uppercase">
-                       Akun demo
-                     </p>
-                     <div class="grid gap-1.5">
-                       ${AKUN_DEMO.map(
-                         (a) => `
-                         <button type="button" data-demo
-                                 data-nip="${a.nip}" data-pin="${a.pin}"
-                                 class="group flex cursor-pointer items-center gap-3 rounded-xl border border-ink/8
-                                        bg-white/55 px-3 py-2.5 text-left transition duration-200 ease-apple
-                                        hover:border-merek/30 hover:bg-white/85 active:scale-[0.99]">
-                           <span class="grid size-8 shrink-0 place-items-center rounded-full bg-merek/12 text-xs font-semibold text-merek">
-                             ${a.label[0]}
-                           </span>
-                           <span class="min-w-0 flex-1">
-                             <span class="block text-sm font-medium text-ink">${a.label}</span>
-                             <span class="block truncate font-mono text-xs text-muted">${a.nip} · PIN ${a.pin}</span>
-                           </span>
-                           <span class="flex shrink-0 items-center gap-1 text-xs font-medium text-merek opacity-0 transition group-hover:opacity-100">
-                             Isi <span class="hidden sm:inline">otomatis</span>${IKON_AKUN}
-                           </span>
-                         </button>`,
-                       ).join('')}
-                     </div>
-                   </div>`
-                : ''
-            }
           </div>
         </div>
       </main>`;
@@ -139,16 +90,6 @@ export default {
     const pemutar = tombol.querySelector('[data-mutar]');
 
     const hentikanJam = jamBerjalan(akar.querySelector('[data-jam]'), akar.querySelector('[data-tanggal]'));
-
-    // Akun demo: sekali klik mengisi form, jadi tidak perlu mengetik ulang.
-    for (const b of akar.querySelectorAll('[data-demo]')) {
-      b.addEventListener('click', () => {
-        form.elements.nip.value = b.dataset.nip;
-        inputPin.value = b.dataset.pin;
-        sembunyikanGalat(akar);
-        tombol.focus();
-      });
-    }
 
     function sibuk(aktif) {
       tombol.disabled = aktif;

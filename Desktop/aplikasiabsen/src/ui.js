@@ -367,7 +367,8 @@ function satuKolom(k, nilaiAwal, id) {
                   placeholder="${esc(k.contoh ?? '')}"
                   ${k.jenis === 'sandi' ? 'autocomplete="new-password"' : 'autocomplete="off"'}
                   ${k.langkah ? `step="${esc(k.langkah)}"` : ''}
-                  ${k.min !== undefined ? `min="${esc(k.min)}"` : ''}>`;
+                  ${k.min !== undefined ? `min="${esc(k.min)}"` : ''}
+                  ${k.max !== undefined ? `max="${esc(k.max)}"` : ''}>`;
 
   return `
     <div class="${k.lebar === 'penuh' ? 'sm:col-span-2' : ''}">
@@ -382,7 +383,7 @@ function satuKolom(k, nilaiAwal, id) {
  * dibatalkan.
  *
  * `kolom` menerangkan tiap isian:
- *   { nama, label, jenis, wajib, contoh, petunjuk, pilihan, lebar, min, langkah }
+ *   { nama, label, jenis, wajib, contoh, petunjuk, pilihan, lebar, min, max, langkah }
  *   jenis  : 'teks' | 'email' | 'sandi' | 'angka' | 'tanggal' | 'jam' | 'pilih' | 'panjang'
  *   wajib  : dicek di sini, tanpa memakai validasi bawaan browser
  *   pilihan: [{ nilai, label }] untuk jenis 'pilih'

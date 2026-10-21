@@ -6,10 +6,11 @@
 // Sebagai gantinya, `POST /kiosk/absen` WAJIB dibatasi di sisi server (hanya
 // dari IP kantor) — lihat PANDUAN-BACKEND.md.
 
-import { api, pengguna } from '../api.js';
+import { api, pengguna, idPerangkat } from '../api.js';
 import { esc, jam, jamBerjalan, tampilkanGalat, sembunyikanGalat, KELAS_ISIAN } from '../ui.js';
+import { formatJarak } from '../tabel.js';
 import * as kamera from '../kamera.js';
-import { ambilLokasi } from '../lokasi.js';
+import { ambilLokasi, AKURASI_MAKS } from '../lokasi.js';
 
 const JEDA_HASIL = 7000; // ms sebelum kembali ke layar awal
 const JEDA_DIAM = 45000; // ms tanpa ketikan sebelum kolom dikosongkan
@@ -174,12 +175,11 @@ export default {
     const panggung = akar.querySelector('[data-panggung]');
     const hentikanJam = jamBerjalan(akar.querySelector('[data-jam]'), akar.querySelector('[data-tanggal]'));
 
-    // ── lokasi untuk mode "di luar" ──────────────────────────────────────────
+    // ── lokasi perangkat ─────────────────────────────────────────────────────
     //
-    // Diminta saat pilihan "di luar" ditekan, bukan saat halaman dibuka:
-    // prompt izin di layar kosong akan dijawab orang pertama yang lewat, belum
-    // tentu orang yang mau absen di luar. Hasilnya disimpan, lalu dipakai
-    // saat absen dikirim.
+    // Diminta setiap formulir absen dibuka, bukan hanya saat "di luar" dipilih:
+    // alamat dari titik perangkat dipakai untuk kedua mode, dan admin perlu
+    // melihatnya di rekap. Hasilnya disimpan, lalu dipakai saat absen dikirim.
 
     function lupakanGps() {
       // Menaikkan urutan membatalkan jawaban yang masih jalan. Tanpa ini,
@@ -210,14 +210,20 @@ export default {
       }
 
       if (gpsStatus === 'siap') {
-        // Di atas 100 m hampir pasti tebakan IP, bukan GPS. Ditulis apa
-        // adanya: admin perlu tahu ini catatan, bukan bukti.
-        const kasar = gps.akurasi === null || gps.akurasi > 100;
-        el.classList.add(kasar ? 'text-amber-700' : 'text-emerald-700');
+        // Di atas 50 m akurasinya sudah kasar. Di atas batas server, absen
+        // "di luar" pasti ditolak; beri tombol ambil ulang sebelum foto diambil.
+        const kasar = gps.akurasi === null || gps.akurasi > 50;
+        const ditolak = gps.akurasi === null || gps.akurasi > AKURASI_MAKS;
+        el.classList.add(ditolak ? 'text-rose-700' : kasar ? 'text-amber-700' : 'text-emerald-700');
         const angka = gps.akurasi === null ? '?' : gps.akurasi;
-        el.innerHTML = `${IKON_LOKASI}<span>Lokasi terkunci · ±${angka} m${
-          kasar ? ' (perkiraan kasar)' : ''
-        }</span>`;
+        el.innerHTML = `${IKON_LOKASI}<span>Lokasi terkunci · akurasi ±${angka} m${
+          ditolak ? ' (terlalu kasar untuk dinas luar)' : kasar ? ' (kasar)' : ''
+        }</span>${
+          ditolak
+            ? '<button type="button" class="shrink-0 font-medium underline">Ambil ulang</button>'
+            : ''
+        }`;
+        el.querySelector('button')?.addEventListener('click', () => mulaiGps());
         return;
       }
 
@@ -289,12 +295,17 @@ export default {
                 </label>
               </div>
               <div data-gps class="mt-2 hidden"></div>
+              <p class="mt-2 text-xs text-muted">
+                Lokasi perangkat diambil untuk mencatat alamat absen, baik di perusahaan maupun di
+                luar. Pilihan "Di luar" untuk dinas luar dan wajib membawa GPS. Server menyimpan
+                titik serta alamat perkiraan Anda, lalu menampilkannya di rekap admin.
+              </p>
             </fieldset>
 
             <div>
               <label for="nip" class="mb-1.5 block text-sm font-medium text-ink">NIP</label>
               <input id="nip" name="nip" autocomplete="off" autocapitalize="characters" required
-                     value="${esc(nipAwal)}" placeholder="ADM001" class="${ISIAN} uppercase" />
+                     value="${esc(nipAwal)}" placeholder="MGG001" class="${ISIAN} uppercase" />
             </div>
 
             <div>
@@ -319,14 +330,15 @@ export default {
 
       for (const radio of form.querySelectorAll('[name="mode"]')) {
         radio.addEventListener('change', () => {
-          if (radio.value === 'luar') {
-            mulaiGps();
-            return;
-          }
-          lupakanGps();
-          gambarGps();
+          // Titik perangkat dipakai untuk kedua mode. Kalau pengambilan
+          // sebelumnya gagal, pilihan mode menjadi kesempatan mencoba lagi.
+          if (!gps && gpsStatus !== 'memuat') mulaiGps();
         });
       }
+
+      // Lokasi diambil lebih dulu, selagi magang mengetik NIP dan PIN, supaya
+      // absen tidak perlu menunggu GPS setelah foto diambil.
+      mulaiGps();
 
       // Kalau NIP sudah terisi, PIN-lah satu-satunya yang perlu diketik.
       (nipAwal ? isianPin : isianNip).focus();
@@ -343,7 +355,9 @@ export default {
           // pilihannya, dan absennya tercatat di tempat yang salah.
           form.querySelector('[name="mode"][value="kantor"]').checked = true;
           lupakanGps();
-          gambarGps();
+          // Orang berikutnya juga perlu alamat absennya, jadi lokasi diambil
+          // ulang untuk formulir yang sudah bersih ini.
+          mulaiGps();
           sembunyikanGalat(panggung);
         }, JEDA_DIAM);
       };
@@ -359,7 +373,7 @@ export default {
       });
 
       // Kelas `uppercase` di CSS cuma mengubah tampilan. Tanpa baris ini,
-      // magang mengetik "adm001", layar memperlihatkan "ADM001", tapi yang
+      // magang mengetik "mgg001", layar memperlihatkan "MGG001", tapi yang
       // dikirim tetap huruf kecil — dan backend yang membandingkan secara
       // sensitif akan menolaknya. Yang dilihat harus sama dengan yang dikirim.
       isianNip.addEventListener('input', () => {
@@ -384,17 +398,36 @@ export default {
         // "Di luar" tanpa koordinat tidak dikirim. Menunggu permintaan yang
         // masih jalan lebih baik daripada menyuruh orang menekan tombol dua
         // kali; kalau ternyata gagal, sebabnya ditulis di layar.
-        if (mode === 'luar' && !gps) {
-          await janjiGps?.catch(() => {});
-          if (!form.isConnected || langkah !== 'siap') return;
+        if (mode === 'luar') {
           if (!gps) {
+            await janjiGps?.catch(() => {});
+            if (!form.isConnected || langkah !== 'siap') return;
+            if (!gps) {
+              tampilkanGalat(
+                panggung,
+                gpsPesan || 'Lokasi belum didapat. Tekan "Coba lagi", atau pilih "Di perusahaan".',
+              );
+              return;
+            }
+          }
+
+          // Dicek sebelum kamera: menolak setelah foto diambil hanya membuat
+          // orang mengulang potret wajah tanpa tahu masalahnya di GPS.
+          if (!Number.isFinite(gps.akurasi) || gps.akurasi > AKURASI_MAKS) {
+            const angka = Number.isFinite(gps.akurasi) ? `±${gps.akurasi} m` : 'tidak tercatat';
             tampilkanGalat(
               panggung,
-              gpsPesan || 'Lokasi belum didapat. Tekan "Coba lagi", atau pilih "Di perusahaan".',
+              `Akurasi GPS ${angka} terlalu kasar untuk absen dinas luar (maksimal ${AKURASI_MAKS} m). ` +
+                'Jarak dari kantor tidak memengaruhi pemeriksaan ini. Tekan "Ambil ulang" di status ' +
+                'lokasi, tunggu GPS membaik, atau pilih "Di perusahaan".',
             );
             return;
           }
         }
+
+        // "Di perusahaan" tidak menunggu lokasi: alamatnya keterangan
+        // tambahan, bukan syarat absen. Pengambilan lokasi sudah berjalan
+        // sejak formulir dibuka, jadi biasanya selesai sebelum submit.
 
         mulaiKamera(nip, isianPin.value, mode);
       });
@@ -518,11 +551,12 @@ export default {
           nip,
           pin,
           foto: gambar,
+          kiosk_id: idPerangkat(),
           lokasi_id: lokasi?.id ?? null,
           mode,
-          // Dikirim hanya untuk "di luar". Server menolak "luar" tanpa
-          // koordinat, jadi jangan pernah mengosongkannya di sini.
-          ...(mode === 'luar' && gps
+          // Titik perangkat ikut untuk kedua mode: server memakainya untuk
+          // menghitung jarak dan mencari alamat yang tampil di rekap.
+          ...(gps
             ? { lintang: gps.lintang, bujur: gps.bujur, akurasi: gps.akurasi }
             : {}),
         });
@@ -534,6 +568,10 @@ export default {
           waktu: jawab.waktu,
           tipe: jawab.tipe,
           gambar,
+          jarak_m: jawab.jarak_m,
+          akurasi: jawab.akurasi,
+          lokasi_teks: jawab.lokasi_teks,
+          lokasi_meragukan: jawab.lokasi_meragukan,
         });
       } catch (galat) {
         // Kembali ke formulir dengan NIP tetap terisi. Yang perlu diulang cuma
@@ -544,12 +582,29 @@ export default {
 
     // ── langkah 4: hasil ─────────────────────────────────────────────────────
 
-    function tampilkanHasil({ ok, judul, pesan = '', nama, waktu, gambar }) {
+    function tampilkanHasil({
+      ok,
+      judul,
+      pesan = '',
+      nama,
+      waktu,
+      gambar,
+      jarak_m = null,
+      akurasi = null,
+      lokasi_teks = null,
+      lokasi_meragukan = false,
+    }) {
       langkah = 'hasil';
       bersihkanTimer();
       bersihkanKamera();
 
       const detik = Math.ceil(JEDA_HASIL / 1000);
+      const jarak = formatJarak(jarak_m);
+      const akurasiTeks = Number.isFinite(akurasi) ? `GPS ±${Math.round(akurasi)} m` : null;
+      const kasar = lokasi_meragukan || (Number.isFinite(akurasi) && akurasi > 50);
+      const rincian = [lokasi_teks, jarak ? `${jarak} dari kantor` : null, akurasiTeks]
+        .filter(Boolean)
+        .join(' · ');
 
       panggung.innerHTML = `
         <div class="w-full max-w-md text-center">
@@ -569,6 +624,13 @@ export default {
                    <span class="min-w-0 flex-1">
                      <span class="block truncate font-medium text-ink">${esc(nama)}</span>
                      <span class="block text-sm text-muted">Pukul ${esc(jam(waktu))}</span>
+                     ${
+                       rincian
+                         ? `<span class="mt-1 block text-xs ${kasar ? 'font-medium text-amber-700' : 'text-muted'}">
+                              ${esc(rincian)}${kasar ? ' · akurasi kasar' : ''}
+                            </span>`
+                         : ''
+                     }
                    </span>
                  </div>`
               : ''
@@ -616,8 +678,11 @@ export default {
       const kueri = location.hash.split('?')[1] ?? '';
       const id = new URLSearchParams(kueri).get('lokasi');
 
+      const kueriLokasi = new URLSearchParams({ perangkat: idPerangkat() });
+      if (id) kueriLokasi.set('lokasi', id);
+
       try {
-        lokasi = await api.get(`/kiosk/lokasi${id ? `?lokasi=${encodeURIComponent(id)}` : ''}`);
+        lokasi = await api.get(`/kiosk/lokasi?${kueriLokasi}`);
       } catch {
         // Lokasi cuma keterangan di sudut layar. Kalau gagal, absen tetap jalan.
         return;

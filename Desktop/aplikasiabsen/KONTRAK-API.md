@@ -48,10 +48,14 @@ development, dan alamatnya sama persis dengan production.
 
 ### Autentikasi
 
-- Setiap endpoint kecuali `/masuk` mengirim header `Authorization: Bearer <token>`
-- Token didapat dari `POST /masuk`
-- Response gagal dengan status `401` dianggap sesi habis → frontend mengembalikan
-  pengguna ke halaman login
+- Setiap endpoint kecuali `/masuk`, `/kiosk/lokasi`, dan `/kiosk/absen` mengirim
+  header `Authorization: Bearer <token>`
+- Token didapat dari `POST /masuk`. Token harus acak (minimal 32 byte), punya
+  masa berlaku (8–12 jam), disimpan sebagai hash, dan dicabut saat `POST /keluar`
+- Response `401` berarti **token tidak ada / tidak valid / kedaluwarsa**.
+  Kredensial salah di `/masuk` dan `/kiosk/absen` juga memakai `401`, tetapi
+  frontend mengecualikan dua endpoint itu dari redirect global. Bedakan dengan
+  field `kode`: `kredensial_salah` vs `sesi_habis`.
 
 **Sesi diperiksa ulang setiap aplikasi dibuka.** Sebelum layar pertama dipasang,
 frontend memanggil `GET /saya/profil` dan menimpa data pengguna yang tersimpan di
@@ -68,7 +72,9 @@ Status jawabannya menentukan tindakan frontend, dan aturan ini sudah tertanam di
 | Jawaban | Tindakan frontend |
 |---|---|
 | `200` | Data pengguna di `localStorage` ditimpa dengan yang baru |
-| `401` atau `403` | Sesi dihapus, pengguna dikembalikan ke halaman login |
+| `401` (`sesi_habis`) | Sesi dihapus, pengguna dikembalikan ke halaman login |
+| `403` (`akun_nonaktif`) | Sesi dihapus saat pemeriksaan awal, pengguna kembali ke login |
+| `403` (`tidak_berhak`) | Sesi **dipertahankan**, layar menampilkan pesan tidak berhak |
 | Gagal jaringan atau `5xx` | Sesi **dipertahankan**, aplikasi lanjut dengan data tersimpan |
 
 Baris terakhir disengaja: jaringan kantor yang sedang bermasalah bukan alasan
@@ -92,13 +98,25 @@ Bebas, asalkan konsisten. Yang dibutuhkan frontend:
 ```json
 {
   "message": "NIP atau PIN salah.",
+  "kode": "kredensial_salah",
   "errors": { "nip": ["NIP wajib diisi."] }
 }
 ```
 
 `message` ditampilkan langsung ke pengguna, jadi mohon ditulis dalam Bahasa
 Indonesia yang enak dibaca. `errors` dipakai untuk menempelkan pesan ke
-masing-masing kolom.
+masing-masing kolom. `kode` membantu frontend membedakan arti status `401`:
+
+| `kode` | Status | Arti |
+|---|---|---|
+| `kredensial_salah` | `401` | NIP/PIN salah di `/masuk` atau `/kiosk/absen` |
+| `sesi_habis` | `401` | Token tidak ada, tidak dikenal, atau kedaluwarsa |
+| `akun_nonaktif` | `403` | Akun sudah dinonaktifkan |
+| `tidak_berhak` | `403` | Peran tidak boleh membuka endpoint itu, atau perangkat kiosk tidak sah/nonaktif |
+| `terlalu_banyak` | `429` | Batas percobaan PIN terlampaui |
+
+Field ini opsional untuk error lain, tetapi status-status di atas sebaiknya
+selalu menyertakannya.
 
 > Penting: backend harus tetap mengirim JSON saat error. Kalau yang terkirim
 > halaman HTML (misal halaman debug Laravel), frontend hanya bisa menampilkan
@@ -126,6 +144,34 @@ karena izinnya ditolak, tapi karena browsernya tidak menawarkan izin itu sama
 sekali di koneksi tidak aman.
 
 Koneksi yang dianggap aman: `https://` apa pun, dan `http://localhost`.
+
+### Header keamanan
+
+Frontend statis sudah membawa `public/_headers` (dibaca Netlify/Cloudflare
+Pages) dengan CSP, `X-Frame-Options`, `Referrer-Policy`, `Permissions-Policy`,
+dan HSTS. Kalau aplikasi disajikan lewat Nginx/Apache/Laravel, **salin header
+yang sama ke server/reverse proxy** — berkas `_headers` tidak dibaca di sana.
+
+CSP bawaannya:
+
+```text
+default-src 'self'; script-src 'self';
+style-src 'self' 'unsafe-inline' https://fonts.googleapis.com;
+font-src 'self' https://fonts.gstatic.com;
+img-src 'self' data: blob:; connect-src 'self';
+object-src 'none'; base-uri 'self'; form-action 'self';
+frame-ancestors 'none'
+```
+
+- `data:`/`blob:` di `img-src` dipakai pratinjau selfie. Jangan hapus, atau
+  foto di layar kiosk tidak muncul.
+- `'unsafe-inline'` di `style-src` hanya untuk bilah kuota cuti yang mengatur
+  `style="width: …"`. Kalau nanti gaya sebaris dihapus, nilai itu bisa dibuang.
+- Kalau `VITE_API_BASE` menunjuk domain lain (bukan `/api` di origin yang
+  sama), tambahkan domain itu ke `connect-src`.
+- `Permissions-Policy` membatasi kamera dan lokasi ke origin sendiri. Jangan
+  memakai `camera=()` atau `geolocation=()` — absen jadi mustahil.
+- HSTS hanya aman setelah HTTPS benar-benar aktif di seluruh subdomain.
 
 ### Menyajikan hasil build frontend
 
@@ -194,9 +240,11 @@ dikerjakan dari atas ke bawah.
   ditebak (`MGG001`, `MGG002`, …), jadi tanpa pembatasan seluruh akun bisa
   dibuka dengan mencoba seribu kombinasi. Batasnya sama seperti kiosk: 5
   percobaan gagal per NIP, lalu tolak `429` selama 60 detik.
-- Gagal: `401` dengan `message: "NIP atau PIN salah."` — **jangan** membedakan
-  "NIP tidak ditemukan" dari "PIN salah", karena pesan yang membedakan keduanya
-  memetakan daftar NIP satu per satu.
+- Gagal: `401` dengan `message: "NIP atau PIN salah."` dan
+  `kode: "kredensial_salah"` — **jangan** membedakan "NIP tidak ditemukan" dari
+  "PIN salah", karena pesan yang membedakan keduanya memetakan daftar NIP satu
+  per satu. Setelah 5 gagal dalam 60 detik → `429` dengan
+  `kode: "terlalu_banyak"`.
 - `cuti_kuota` tetap ada di baris pengguna karena formulir Data Master yang
   mengisinya, tapi **tidak ada layar yang membacanya lagi**: sisa cuti dikirim
   sudah jadi lewat `GET /saya/izin`.
@@ -236,8 +284,8 @@ sebelum layar pertama dipasang — lihat bagian Autentikasi di atas.
   Profil Saya. **Layar itu sudah dihapus** — anak magang tidak punya profil
   sendiri, karena semua kolomnya diatur admin — jadi ketiganya tidak perlu
   dikirim lagi.
-- `401` kalau tokennya tidak dikenali lagi
-- `403` kalau akunnya sudah dinonaktifkan
+- `401` dengan `kode: "sesi_habis"` kalau tokennya tidak dikenali lagi
+- `403` dengan `kode: "akun_nonaktif"` kalau akunnya sudah dinonaktifkan
 - Jangan dibuat mahal. Endpoint ini jalan setiap kali aplikasi dibuka.
 
 #### `GET /admin/dashboard?tanggal=2026-10-19`
@@ -280,7 +328,11 @@ Isi layar Beranda untuk admin. Satu panggilan, karena semuanya tampil bersamaan.
   "aktivitas": [
     {
       "id": 5646, "nama": "Lukman Hakim", "nip": "MGG038", "tipe": "pulang",
-      "waktu": "2026-10-19T15:18:42+07:00", "foto": null, "lokasi": "Gudang Cikarang"
+      "waktu": "2026-10-19T15:18:42+07:00", "foto": null,
+      "lokasi": "Dinas luar", "lokasi_kantor": "Gudang Cikarang",
+      "mode": "luar", "lintang": -6.284312, "bujur": 107.166041,
+      "akurasi": 12, "jarak_m": 34, "lokasi_meragukan": false,
+      "lokasi_teks": "Jl. Industri Raya, Cikarang"
     }
   ]
 }
@@ -302,34 +354,51 @@ Aturan yang perlu diikuti:
 5. `aktivitas` cukup 6 baris terbaru. Tiap baris bisa membawa foto, dan memuat
    seratus foto wajah akan membuat halaman ini berat.
 6. `foto` boleh `null` — frontend menggantinya dengan lingkaran berisi inisial.
-7. `aktivitas[].lokasi` untuk absen `mode: "luar"` diisi **`"Luar kantor"`**,
+7. `aktivitas[].lokasi` untuk absen `mode: "luar"` diisi **`"Dinas luar"`**,
    bukan nama kantornya. Itulah tanda yang dibaca admin untuk tahu ada yang
    absen dari luar; `lokasi_id` di baris absennya tetap kantor tempat kiosk
-   terpasang.
+   terpasang. Sertakan juga:
+   - `lokasi_kantor` — nama titik kantor yang dipakai menghitung jarak,
+   - `mode` (`"kantor"` / `"luar"`),
+   - `lintang`, `bujur`, `akurasi` (boleh `null` untuk baris lama),
+   - `jarak_m` — hasil hitungan Haversine **saat absen**, bukan dihitung ulang
+     saat dashboard dibuka,
+   - `lokasi_meragukan` — `true` kalau akurasi GPS kasar atau ada tanda lain
+     yang layak diperiksa admin,
+   - `lokasi_teks` — alamat pendek hasil reverse geocoding (Nominatim/OSM,
+     gratis). Kalau layanan sedang gagal, kirim `null`; frontend tetap
+     menampilkan koordinat dan tautan peta.
    Riwayat lama sebaiknya tidak menyertakan foto sama sekali.
-7. Magang yang bergabung **setelah** tanggal yang diminta belum ikut dihitung.
-8. **Akun admin tidak dihitung sebagai orang yang harus absen.** Dashboard yang
+8. Magang yang bergabung **setelah** tanggal yang diminta belum ikut dihitung.
+9. **Akun admin tidak dihitung sebagai orang yang harus absen.** Dashboard yang
    menghitung semua akun akan melaporkan adminnya sendiri sebagai "belum absen"
    setiap hari, dan tidak ada layar mana pun yang bisa menghilangkannya.
    Pengecualiannya: admin yang memang punya absen atau izin di tanggal itu tetap
    ikut dihitung, supaya angkanya tetap berjumlah pas seperti aturan 2.
-9. Hanya untuk `peran: "admin"`. Selain itu → `403`.
+10. Hanya untuk `peran: "admin"`. Selain itu → `403`.
 
-#### `GET /kiosk/lokasi?lokasi=<id>`
+#### `GET /kiosk/lokasi?lokasi=<id>&perangkat=<kiosk_id>`
 
 Identitas kiosk. Dipanggil layar absen saat dibuka, tanpa login.
 
 ```json
 // berhasil — 200
-{ "id": 2, "nama": "Gudang Cikarang" }
+{ "id": 2, "nama": "Gudang Cikarang", "kiosk_id": "9f4c..." }
 ```
 
 - `id` datang dari alamat halaman: `#/absen?lokasi=2`. Satu PC kiosk = satu
   alamat tetap, diatur saat pemasangan. Tanpa parameter, kembalikan lokasi
   pertama.
+- `perangkat` adalah identitas perangkat yang stabil. Server menyimpan daftar
+  perangkat kiosk yang sah beserta lokasi yang terikat ke perangkat itu.
+  Pendaftaran perangkat baru sebaiknya disetujui admin; jangan menerima id
+  acak sebagai kiosk sah.
+- Setelah terikat, satu perangkat hanya boleh memakai satu lokasi. Mengubah
+  `?lokasi=` di URL tidak boleh memindahkan kiosk.
 - Cuma dipakai untuk menampilkan badge nama lokasi di sudut layar. Kalau
   endpoint ini gagal, kiosk tetap bisa dipakai — jadi jangan jadikan syarat
-  untuk absen.
+  untuk absen. Namun `POST /kiosk/absen` tetap menolak perangkat yang belum
+  terdaftar.
 - Nama lokasinya salah tulis? Yang tertulis di layar kiosk ikut salah. Itu
   memang gunanya: admin langsung tahu ada kiosk yang salah setel.
 
@@ -339,12 +408,13 @@ Identitas kiosk. Dipanggil layar absen saat dibuka, tanpa login.
 menyimpan token siapa pun di `localStorage`-nya.
 
 ```json
-// permintaan — absen di luar, koordinat wajib ikut
+// permintaan — dinas luar, koordinat wajib ikut
 {
   "nip": "MGG002",
   "pin": "2222",
   "foto": "data:image/jpeg;base64,/9j/4AAQ...",
-  "lokasi_id": 2,
+  "kiosk_id": "9f4c...",
+  "lokasi_id": 1,
   "mode": "luar",
   "lintang": -6.208812,
   "bujur": 106.845599,
@@ -352,8 +422,13 @@ menyimpan token siapa pun di `localStorage`-nya.
 }
 ```
 
-> Untuk `mode: "kantor"`, `lintang`, `bujur`, dan `akurasi` **tidak dikirim sama
-> sekali**. Kalau tetap terkirim, abaikan dan simpan `null`.
+> `kiosk_id` **wajib**. Server memakai lokasi yang terikat ke perangkat, bukan
+> `lokasi_id` kiriman klien; kalau nilainya berbeda → `403`.
+>
+> Untuk `mode: "kantor"`, `lintang`, `bujur`, dan `akurasi` **tidak wajib
+> dikirim**. Kalau tetap terkirim, server boleh mencatat jaraknya juga.
+> Pertahanannya adalah perangkat kiosk terdaftar + PIN, bukan semata IP kantor.
+> Lihat aturan 4-6 dan 11 di bawah.
 
 ```json
 // berhasil — 200
@@ -362,49 +437,97 @@ menyimpan token siapa pun di `localStorage`-nya.
   "nama": "Siti Rahayu",
   "nip": "MGG002",
   "waktu": "2026-10-19T08:03:00+07:00",
-  "lokasi_id": 2
+  "lokasi_id": 1,
+  "mode": "luar",
+  "jarak_m": 4370,
+  "akurasi": 12,
+  "lokasi_teks": "Gambir, Jakarta Pusat",
+  "lokasi_meragukan": false
 }
 ```
 
 Aturan yang **wajib** dipatuhi backend:
 
 1. **`nip` dan `pin` diperiksa bersamaan.** Pesan gagalnya harus sama untuk
-   dua-duanya: `"NIP atau PIN tidak dikenali."` Kalau backend menjawab "NIP
-   tidak ditemukan", siapa pun bisa memetakan NIP magang satu per satu.
+   dua-duanya: `"NIP atau PIN salah."` dengan `kode: "kredensial_salah"`.
+   Kalau backend menjawab "NIP tidak ditemukan", siapa pun bisa memetakan NIP
+   magang satu per satu.
 2. **`tipe` ditentukan server**, bukan dikirim frontend. Aturannya: belum ada
    catatan `masuk` hari ini → `masuk`; sudah ada `masuk` tapi belum `pulang` →
    `pulang`; sudah lengkap → `409` dengan pesan `"<nama> sudah absen pulang hari ini."`
 3. **`nip` dibandingkan tanpa peduli huruf besar-kecil.** Frontend sudah
    menaikkan hurufnya sebelum mengirim, tapi jangan bergantung pada itu.
 4. **Batas percobaan.** Kiosk ini terbuka, jadi PIN 4 angka bisa ditebak
-   berulang kali. Batasi per NIP dan per alamat IP — misalnya 5 kali gagal lalu
-   tunggu 60 detik (status `429`).
-5. **Batasi dari alamat kantor.** Ini satu-satunya yang benar-benar mencegah
-   absen dari rumah. Magang bisa membuka `#/absen` dari HP-nya di rumah;
-   kalau `POST /kiosk/absen` tidak dibatasi IP, PIN-lah satu-satunya penghalang
-   dan 4 angka itu tidak cukup.
+   berulang kali. Batasi per NIP **dan** per `kiosk_id` — misalnya 5 kali gagal
+   lalu tunggu 60 detik. Saat batas tercapai balas `429` dengan
+   `kode: "terlalu_banyak"`. Jangan membocorkan apakah NIP-nya ada lewat
+   perbedaan pesan atau status.
+5. **Perangkat kiosk harus terdaftar.** Ini lapisan pertahanan utama. Server
+   menyimpan daftar `kiosk_id` yang sah dan lokasi yang terikat padanya;
+   pendaftaran perangkat baru disetujui admin saat pemasangan. `kiosk_id` yang
+   tidak dikenal, atau yang lokasinya tidak cocok dengan `lokasi_id` kiriman,
+   ditolak `403` dengan `kode: "tidak_berhak"`.
+   - Jangan menerima `kiosk_id` acak dari klien sebagai kiosk sah. Identitas
+     perangkat dibuat sekali saat pendaftaran dan disimpan di PC kiosk.
+   - Kalau jaringan kantor memungkinkan, **boleh** menambah pembatasan IP/Wi-Fi
+     sebagai lapisan tambahan. Jangan menjadikannya satu-satunya pertahanan:
+     IP bisa berubah (ISP, hotspot, VPN) dan satu IP kantor dipakai semua orang.
 6. **Jam pakai jam server.** Lihat bagian Waktu di atas.
 7. **`mode` berisi `"kantor"` atau `"luar"`.** Simpan apa adanya di baris absen;
    kalau tidak dikirim atau isinya lain, anggap `"kantor"`. Fotonya tetap wajib
    di dua-duanya — `mode` cuma keterangan tempat, bukan izin istimewa.
-8. **`mode: "luar"` tanpa koordinat ditolak `422`.** `lintang` (−90…90) dan
-   `bujur` (−180…180) wajib berupa angka; `akurasi` (meter) boleh `null` atau
-   tidak dikirim sama sekali. Simpan ketiganya di baris absen. Untuk
-   `"kantor"`, koordinat yang ikut terkirim diabaikan dan disimpan `null`.
-   Tanpa aturan ini, "di luar" cuma tulisan yang tidak bisa diperiksa siapa pun
-   saat absennya dipertanyakan.
-9. Gagal validasi → `422` dengan `message`, bukan halaman HTML.
+8. **`mode: "luar"` wajib membawa koordinat DAN akurasi.** `lintang` (−90…90)
+   dan `bujur` (−180…180) wajib berupa angka; `akurasi` (meter) wajib angka
+   yang masuk akal. Kalau tidak ada, balas `422` dengan pesan yang bisa dibaca
+   magang — jangan diam-diam menganggapnya `0`.
+9. **Jarak dihitung di server, bukan di frontend, dan TIDAK dipakai menolak
+   absen dinas luar.** Titik kantor diambil dari `lokasi.lintang` /
+   `lokasi.bujur` (lihat `GET /admin/lokasi`), lalu dihitung dengan **rumus
+   Haversine**. Simpan hasilnya di `jarak_m`. Magang yang sedang dinas di luar
+   memang jauh dari kantor — menolak karena `jarak_m > radius_m` akan membuat
+   fitur ini tidak bisa dipakai. `radius_m` (bawaan **50**) hanya pembanding
+   "masih di area kantor", bukan pagar. **Abaikan** `jarak_m` yang dikirim
+   klien — angka itu bisa diubah sebelum dikirim.
+10. **Akurasi GPS ikut disimpan dan diperiksa.** `akurasi` adalah jari-jari
+    perkiraan dalam meter, bukan jaminan. Tolak `422` kalau `akurasi` hilang
+    atau lebih besar dari **150 m**, karena pada angka itu titiknya terlalu
+    kasar untuk dicatat. Simpan nilai aslinya; frontend menampilkannya sebagai
+    "± N m", dan admin perlu tahu itu perkiraan.
+11. **`mode: "kantor"` tidak wajib mengirim koordinat.** Kiosk ini PC kantor
+    yang tidak berpindah; sebagian PC tidak punya GPS dan browsernya menebak
+    dari Wi-Fi/IP. Untuk mode ini, pertahanan yang dipakai adalah **perangkat
+    kiosk terdaftar + PIN** (poin 4-5). Kalau koordinat tetap dikirim, simpan
+    sebagai keterangan dan jangan tolak hanya karena jauh — angka PC kiosk
+    memang bisa meleset ratusan meter. Foto tetap wajib.
+12. **Isi juga `lokasi_teks` dari reverse geocoding gratis.** Setelah koordinat
+    diterima, panggil **Nominatim OpenStreetMap** dari server, lalu simpan
+    alamat pendeknya (jalan/daerah/kota) di `lokasi_teks`. Layanan ini gratis,
+    tanpa kunci API, tetapi wajib: maksimal **1 permintaan/detik**, hasilnya
+    di-cache, dan aplikasi memperkenalkan diri lewat `User-Agent`/`Referer`.
+    Kalau layanan gagal, kirim `null` — absen tetap diterima dan frontend
+    menampilkan koordinat + tautan peta. Jangan memakai layanan berbayar untuk
+    kebutuhan ini.
+13. Gagal validasi → `422` dengan `message`, bukan halaman HTML.
 
-> **Kenapa koordinat tidak dipakai untuk memblokir apa pun.** Angka `akurasi`
-> adalah jari-jari perkiraan dalam meter, dan sumbernya berbeda-beda. HP memakai
-> GPS (biasanya 5–50 m). PC kiosk tidak punya GPS sama sekali — browsernya
-> menebak dari IP atau Wi-Fi, dan hasilnya bisa meleset ratusan meter sampai
-> salah kota. Menolak absen karena "terlalu jauh dari kantor" akan menolak orang
-> yang memang sedang duduk di kantor. Simpan angkanya, biarkan admin menilai.
->
-> Batas percobaan PIN dan pembatasan IP (poin 4 dan 5) tetap wajib. Koordinat
-> bukan pengganti keduanya: angkanya datang dari browser dan bisa dipalsukan
-> dengan ekstensi apa pun.
+> **Kenapa perangkat kiosk terdaftar tetap wajib walaupun sudah ada GPS.**
+> Koordinat datang dari browser dan bisa dipalsukan dengan aplikasi Fake GPS
+> atau ekstensi. Karena absen dinas luar memang boleh jauh, jarak bukan bukti
+> kehadiran dan bukan pagar. Pakai beberapa lapisan sekaligus: `kiosk_id` yang
+> terdaftar + PIN + batas percobaan, foto selfie, serta pemeriksaan akurasi dan
+> pola perpindahan di server. Pembatasan IP/Wi-Fi kantor boleh ditambahkan
+> sebagai lapisan tambahan, bukan pengganti. Jangan pernah menghitung atau
+> menolak jarak di JavaScript klien.
+
+> **Antisipasi Fake GPS yang disarankan.** (1) Simpan `ip` dan `user_agent`
+> setiap absen, lalu tandai absen dari luar IP kantor. (2) Tolak akurasi yang
+> tidak masuk akal atau terlalu kasar. (3) Bandingkan dengan absen terakhir
+> orang yang sama: perpindahan yang mustahil dalam waktu singkat (misalnya
+> puluhan kilometer dalam satu menit) layak ditandai. (4) Untuk aplikasi
+> Android/iOS native, periksa `isMockLocation`/`isFromMockProvider`. (5) Jangan
+> menjadikan koordinat satu-satunya bukti — foto selfie dan `kiosk_id` terdaftar
+> tetap dipakai. Tanda "mencurigakan" ditampilkan admin, bukan dipakai menuduh
+> otomatis. Jarak yang jauh dari kantor **bukan** tanda curiga: itu normal
+> untuk dinas luar.
 
 ---
 
@@ -557,7 +680,8 @@ dinonaktifkan masih bisa masuk hari itu juga.
   "data": [
     {
       "id": 1, "nama": "Kantor Pusat", "aktif": true, "jumlah_magang": 37,
-      "alamat": "Jl. Jenderal Sudirman No. 1, Jakarta"
+      "alamat": "Jl. Jenderal Sudirman No. 1, Jakarta",
+      "lintang": -6.2246, "bujur": 106.8094, "radius_m": 50
     }
   ]
 }
@@ -565,6 +689,10 @@ dinonaktifkan masih bisa masuk hari itu juga.
 
 - `jumlah_magang` = jumlah magang **aktif** di lokasi itu. Dihitung server.
   Dipakai layar supaya admin tahu akibatnya sebelum menutup sebuah lokasi.
+- `lintang`, `bujur`, dan `radius_m` adalah titik kantor. **Wajib dikirim**
+  karena frontend menampilkannya, formulir admin memakainya, dan server
+  membutuhkannya untuk menghitung `jarak_m` absen dinas luar. `radius_m`
+  (bawaan **50** meter) hanya pembanding area kantor, bukan pagar penolakan.
 - Kembalikan **semua**, termasuk yang sudah nonaktif. Layar menampilkannya, dan
   formulir magang perlu tetap bisa menampilkan lokasi yang sudah dipilih
   walaupun lokasinya keburu ditutup.
@@ -572,11 +700,24 @@ dinonaktifkan masih bisa masuk hari itu juga.
 #### `POST /admin/lokasi` · `PUT /admin/lokasi/{id}`
 
 ```json
-{ "nama": "Kantor Bandung", "alamat": "Jl. Asia Afrika No. 3", "aktif": "true" }
+{
+  "nama": "Kantor Bandung",
+  "alamat": "Jl. Asia Afrika No. 3",
+  "lintang": "-6.921840",
+  "bujur": "107.607120",
+  "radius_m": "50",
+  "aktif": "true"
+}
 ```
 
 - `nama` wajib dan tidak boleh kembar, dibandingkan **tanpa** membedakan huruf
   besar-kecil
+- `lintang` (−90…90) dan `bujur` (−180…180) wajib berupa angka. Tanpa titik
+  kantor, server tidak punya pembanding untuk menghitung jarak. `PUT` tetap
+  boleh parsial, tetapi kalau salah satu dikirim, keduanya harus sah.
+- `radius_m` antara 1 dan 5000 meter; kalau tidak dikirim, pakai 50. Nilai ini
+  tidak menolak absen dinas luar; hanya menandai seberapa jauh titik itu dari
+  area kantor.
 - `aktif` datang sebagai teks `"true"`/`"false"`, karena isian formulir selalu
   berupa teks
 - Lokasi nonaktif **tidak boleh muncul di pilihan kiosk**. Alamat kiosk yang
@@ -827,8 +968,10 @@ Balasan `201`: baris barunya, ditambah `hari_kerja`.
       "pulang": "2026-10-01T17:07:00+07:00",
       "telat_menit": 28, "status": "telat",
       "keterangan_izin": null, "alasan_izin": null,
-      "lokasi": "Kantor Pusat", "foto": null,
-      "mode": "kantor", "lintang": null, "bujur": null, "akurasi": null
+      "lokasi": "Dinas luar", "lokasi_kantor": "Kantor Pusat", "foto": null,
+      "mode": "luar", "lintang": -6.224612, "bujur": 106.809441,
+      "akurasi": 12, "jarak_m": 32, "lokasi_meragukan": false,
+      "lokasi_teks": null
     }
   ]
 }
@@ -851,12 +994,17 @@ Balasan `201`: baris barunya, ditambah `hari_kerja`.
   dan jam shift. Tarifnya bisa berubah, dan angka yang ditampilkan saat ini harus
   angka yang berlaku saat itu.
 - `mode` berisi `"kantor"` atau `"luar"`; baris lama yang belum punya kolom ini
-  dikirim sebagai `"kantor"`. Untuk `"luar"`, `lokasi` diisi `"Luar kantor"` dan
-  `lintang`/`bujur`/`akurasi` berisi titik yang dikirim kiosk — frontend memakai
-  koordinat itu untuk menautkan barisnya ke peta OpenStreetMap, jadi kirim
-  angkanya apa adanya. `akurasi` boleh `null` kalau perangkat tidak
-  melaporkannya. Baris tanpa absen (izin, libur, alpha) cukup mengirim ketiga
-  kolom ini sebagai `null`.
+  dikirim sebagai `"kantor"`. Untuk `"luar"`, `lokasi` diisi `"Dinas luar"` dan
+  `lokasi_kantor` berisi nama titik kantor yang dipakai menghitung jarak.
+  `lintang`/`bujur`/`akurasi` berisi titik yang dikirim kiosk, sedangkan
+  `jarak_m` adalah **hasil hitungan server saat absen** — jangan menghitungnya
+  ulang di frontend atau saat laporan dibuka. Frontend memakai koordinat itu
+  untuk menautkan barisnya ke peta OpenStreetMap, jadi kirim angkanya apa
+  adanya. `akurasi` boleh `null` untuk baris lama; baris baru sebaiknya selalu
+  punya angka. `lokasi_meragukan` menandai GPS kasar/tanda lain yang perlu
+  diperiksa, dan `lokasi_teks` opsional berisi hasil reverse geocoding.
+  Baris tanpa absen (izin, libur, alpha) cukup mengirim kolom-kolom ini sebagai
+  `null` (kecuali `mode`, kirim `"kantor"`).
 
 **Urutan prioritas status wajib sama persis**, dan urutannya begini:
 
@@ -922,7 +1070,8 @@ sendiri.
       "divisi": "Management Data", "nik": "3271012345670006",
       "shift": "Reguler", "aktif": true, "hari_kerja": 13,
       "hadir": 12, "telat": 2, "telat_menit": 52,
-      "izin": 0, "cuti": 0, "sakit": 1, "alpha": 0
+      "izin": 0, "cuti": 0, "sakit": 1, "alpha": 0,
+      "luar": 3, "luar_kasar": 1
     }
   ]
 }
@@ -946,6 +1095,11 @@ sendiri.
 - `ringkasan.izin` = jumlah `izin` + `cuti` + `sakit` dari seluruh baris. Ini
   pengecualian dari aturan "jangan digabung": untuk satu angka besar di kartu
   ringkasan, yang dibaca cuma "berapa hari orang tidak masuk".
+- `luar` = jumlah hari dengan absen `mode: "luar"` pada bulan itu.
+  `luar_kasar` = berapa di antaranya berakurasi GPS rendah
+  (`lokasi_meragukan` atau `akurasi > 50`). Kolom ini dipakai layar rekap untuk
+  menunjukkan siapa yang perlu dibuka rinciannya; rincian harian tetap yang
+  memuat titik dan tautan petanya.
 - Ukurannya 50 orang × 1 bulan. Aman dihitung saat permintaan datang. Kalau
   magangnya jadi ratusan, ini yang pertama perlu di-cache — bukan yang pertama
   perlu ditambah parameter.
@@ -981,14 +1135,16 @@ koma membuka seluruh isinya di satu kolom.
 ### Yang belum ada, dan sengaja dibiarkan begitu
 
 `GET /admin/anomali` — absen mencurigakan: `ip`, `tanpa_foto`, `pin_salah_berulang`.
-Tidak ada layar yang memakainya, jadi endpoint-nya belum dibuat.
+Tidak ada layar yang memakainya, jadi endpoint-nya belum wajib. Kalau kamu
+membuatnya, sertakan juga absen yang `lokasi_meragukan`, jarak yang tidak wajar,
+dan perpindahan yang mustahil dalam waktu singkat.
 
-Dulu barisnya juga direncanakan memuat `jarak_m` — jarak absen dari titik kantor.
-Rencana itu dibatalkan: kiosk ini PC kantor yang tidak berpindah, jadi titik
-kantornya sudah pasti, dan akurasi PC tidak cukup untuk menghitung jarak yang
-berarti. Yang sekarang ada hanyalah koordinat yang **dilaporkan sendiri** saat
-magang memilih "di luar" (lihat `POST /kiosk/absen`). Koordinat itu untuk
-menunjukkan di mana orangnya, bukan untuk memblokir atau menuduh.
+`jarak_m` sekarang **ada** dan dihitung server dengan Haversine saat absen
+(lihat `POST /kiosk/absen`). Angka itu disimpan di baris absen, bukan dihitung
+ulang saat laporan dibuka: mengubah titik kantor besok tidak boleh mengubah
+jarak absen kemarin. Koordinat dan `akurasi` tetap ditampilkan sebagai
+perkiraan, bukan bukti — itu sebabnya admin melihat "± N m" dan tautan peta,
+bukan satu tuduhan otomatis.
 
 ---
 
@@ -1015,9 +1171,20 @@ Dengan ~100 absen sehari, selisihnya tidak berarti.
 Yang perlu dipastikan dari sisi backend:
 
 1. Batas ukuran body cukup. Kalau pakai PHP, `post_max_size` dan
-   `upload_max_filesize` perlu di atas 1 MB supaya ada ruang lega.
-2. Kalau `/api/kiosk/absen` melakukan validasi dan gagal, **jangan** mengembalikan
+   `upload_max_filesize` perlu di atas 1 MB supaya ada ruang lega. Tolak body
+   yang melebihi batas dengan `413` (JSON, bukan halaman HTML).
+2. **Validasi isi fotonya, bukan cuma panjang stringnya.** Terima hanya data URI
+   `data:image/jpeg;base64,` atau `data:image/png;base64,`; tolak
+   `image/svg+xml` dan tipe lain dengan `422`. Setelah di-decode, batasi
+   ukurannya (misalnya maksimal **200 KB**), lalu periksa magic bytes
+   (`FF D8 FF` untuk JPEG, `89 50 4E 47` untuk PNG) — jangan percaya label
+   MIME dari klien. Foto kosong/rusak juga `422`.
+3. Kalau `/api/kiosk/absen` melakukan validasi dan gagal, **jangan** mengembalikan
    HTML — frontend tidak akan bisa menampilkan pesannya.
-
-Simpan foto di penyimpanan privat, bukan folder yang bisa diakses publik.
-Foto wajah magang tidak boleh bisa dibuka siapa pun yang menebak URL-nya.
+4. Simpan foto di penyimpanan privat, bukan folder yang bisa diakses publik.
+   Foto wajah magang tidak boleh bisa dibuka siapa pun yang menebak URL-nya.
+   Sajikan lewat endpoint ber-otorisasi, bukan URL statis.
+5. **Audit log admin.** Catat siapa mengubah PIN, menyetujui/menolak cuti,
+   mengubah lokasi/shift, dan mengubah data magang — beserta waktu, IP, dan
+   `user_agent`. Jangan pernah menyimpan PIN mentah di log; catat “PIN diubah”,
+   bukan nilainya. Log tidak boleh bisa diubah lewat API biasa.

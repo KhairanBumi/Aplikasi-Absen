@@ -44,7 +44,16 @@ import {
  * tidak berubah jadi simbol aneh saat Excel menebak sendiri encoding-nya.
  */
 function unduhCSV(namaBerkas, kepala, baris) {
-  const sel = (nilai) => `"${String(nilai ?? '').replace(/"/g, '""')}"`;
+  const sel = (nilai) => {
+    let teks = String(nilai ?? '');
+
+    // Excel/LibreOffice mengeksekusi sel yang dimulai dengan =, +, -, atau @
+    // sebagai rumus. Nama magang "=1+1" tidak boleh berubah jadi angka 2 saat
+    // berkasnya dibuka. Awali dengan apostrof supaya diperlakukan sebagai teks.
+    if (/^[=+\-@\t\r]/.test(teks)) teks = `'${teks}`;
+
+    return `"${teks.replace(/"/g, '""')}"`;
+  };
   const isi = [kepala, ...baris].map((b) => b.map(sel).join(';')).join('\r\n');
 
   const tautan = document.createElement('a');
@@ -150,6 +159,18 @@ export default {
             </div>`,
         },
         { judul: 'Shift', sel: (u) => `<span class="text-muted">${esc(u.shift)}</span>` },
+        {
+          judul: 'Dinas luar',
+          kelas: 'text-right',
+          sel: (u) => {
+            if (!u.luar) return '<span class="text-muted">—</span>';
+            return `<span class="tabular-nums text-ink">${u.luar}×</span>${
+              u.luar_kasar
+                ? `<span class="mt-0.5 block text-xs font-medium text-amber-700">${u.luar_kasar} GPS kasar</span>`
+                : ''
+            }`;
+          },
+        },
         { judul: 'Hadir', kelas: 'text-right', sel: (u) => `<span class="tabular-nums text-ink">${u.hadir}</span>` },
         {
           judul: 'Terlambat',
@@ -193,6 +214,10 @@ export default {
       const hitung = (s) => hari.filter((h) => h.status === s).length;
       const hadir = hitung('tepat') + hitung('telat');
       const telatMenit = hari.reduce((n, h) => n + h.telat_menit, 0);
+      const luar = hari.filter((h) => h.mode === 'luar' && h.masuk);
+      const luarKasar = luar.filter(
+        (h) => h.lokasi_meragukan || !Number.isFinite(h.akurasi) || h.akurasi > 50,
+      );
 
       kotak.innerHTML = `
         <div class="${KARTU}">
@@ -232,6 +257,23 @@ export default {
         <div class="${KARTU} mt-6">
           <h2 class="text-lg font-semibold tracking-tight text-ink">Catatan harian</h2>
           <p class="mt-0.5 text-sm text-muted">${hari.length} hari pada ${esc(labelBulan(bulan))}</p>
+
+          ${
+            luar.length > 0
+              ? `<div class="mt-3 rounded-xl bg-ink/4 px-3.5 py-2.5 text-xs text-muted">
+                   <span class="font-medium text-ink">${luar.length} absen dinas luar.</span>
+                   Server mencatat jarak dan alamat perkiraan; absen tetap diterima di mana pun
+                   magang bertugas. Akurasi GPS adalah perkiraan, bukan jaminan. Alamat &amp; peta:
+                   © OpenStreetMap contributors.
+                   ${
+                     luarKasar.length > 0
+                       ? `<span class="mt-1 block font-medium text-amber-700">${luarKasar.length} di antaranya berakurasi kasar — buka Peta untuk memeriksa titiknya.</span>`
+                       : ''
+                   }
+                 </div>`
+              : ''
+          }
+
           ${tabel({ kolom: kolomHarian(), baris: hari, kosong: 'Belum ada catatan pada bulan ini.' })}
         </div>`;
     }
@@ -338,13 +380,15 @@ export default {
       try {
         unduhCSV(
           `rekap-absen-${bulan}.csv`,
-          ['NIP', 'Nama', 'Divisi', 'NIK', 'Shift', 'Hadir', 'Terlambat', 'Menit terlambat', 'Izin', 'Cuti', 'Sakit', 'Tanpa catatan'],
+          ['NIP', 'Nama', 'Divisi', 'NIK', 'Shift', 'Dinas luar', 'Dinas luar GPS kasar', 'Hadir', 'Terlambat', 'Menit terlambat', 'Izin', 'Cuti', 'Sakit', 'Tanpa catatan'],
           rekap.data.map((u) => [
             u.nip,
             u.nama,
             u.divisi,
             u.nik,
             u.shift,
+            u.luar ?? 0,
+            u.luar_kasar ?? 0,
             u.hadir,
             u.telat,
             u.telat_menit,

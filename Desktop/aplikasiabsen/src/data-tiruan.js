@@ -98,8 +98,32 @@ export const DIVISI = ['Pendataan', 'Perhitungan', 'Management Data'];
 // orang-orang yang bekerja di sana kehilangan tempatnya. Menutup lokasi
 // artinya menonaktifkannya, bukan menghapusnya.
 export const lokasi = [
-  { id: 1, nama: 'Kantor Pusat', alamat: 'Jl. Jenderal Sudirman No. 1, Jakarta', aktif: true },
-  { id: 2, nama: 'Gudang Cikarang', alamat: 'Jl. Industri Raya No. 8, Cikarang', aktif: true },
+  {
+    id: 1,
+    nama: 'Kantor Pusat',
+    alamat: 'Jl. Jenderal Sudirman No. 1, Jakarta',
+    aktif: true,
+    // Titik kantor dipakai SERVER untuk menghitung jarak absen dan menjadi
+    // pembanding saat magang absen "dinas luar". Jangan pernah menghitung jarak
+    // di browser: angka dari klien bisa diubah sebelum dikirim.
+    //
+    // Koordinat di bawah HANYA CONTOH, bukan hasil pencarian di Google Maps.
+    // Admin wajib menggantinya lewat Data Master → Lokasi Kantor dengan titik
+    // kantor yang sebenarnya. `radius_m` adalah pembanding area kantor; absen
+    // dinas luar tetap diterima di luar radius.
+    lintang: -6.2246,
+    bujur: 106.8094,
+    radius_m: 50,
+  },
+  {
+    id: 2,
+    nama: 'Gudang Cikarang',
+    alamat: 'Jl. Industri Raya No. 8, Cikarang',
+    aktif: true,
+    lintang: -6.2843,
+    bujur: 107.166,
+    radius_m: 50,
+  },
 ];
 
 // Satu shift saja: 08.00 sampai 17.00, Senin sampai Jumat.
@@ -135,14 +159,15 @@ export const hariLibur = [
 // masuk, tidak ada cara menambah anak magang pertama. Karena itu akun inilah
 // yang dipertahankan, dan hanya ini.
 //
-// Ini akun tiruan, jadi PIN-nya ditulis apa adanya. PIN asli wajib di-hash di
-// backend — lihat KONTRAK-API.md.
+// PIN disimpan sebagai hash, sama seperti yang wajib dilakukan backend asli.
+// Nilai di bawah adalah SHA-256 dari PIN akun demo dengan salt khusus mode
+// tiruan; PIN mentahnya tidak pernah ikut ke bundle produksi.
 export const pengguna = [
   {
     id: 1,
     nama: 'Budi Santoso',
     email: 'admin@kantor.id',
-    pin: '1111',
+    pin_hash: 'sha256$38305ecf098321474df4a37bcfa8f3aeb7ff0840671a223c4bbbfe87952c54d7',
     peran: 'admin',
     nip: 'ADM001',
     divisi: 'Management Data',
@@ -160,6 +185,14 @@ export const pengguna = [
 // tahu berkas mana yang punya koleksi apa.
 export const absen = [];
 export const izin = [];
+
+// Tabel pendukung yang hanya hidup di mode tiruan. Bentuknya sengaja sama
+// dengan yang diminta backend asli: sesi menyimpan hash token (bukan token
+// mentah), perangkat menyimpan pendaftaran kiosk, dan audit menyimpan jejak
+// tindakan admin.
+export const sesi = [];
+export const perangkat = [];
+export const audit = [];
 
 const hariIni = bagianJakarta();
 

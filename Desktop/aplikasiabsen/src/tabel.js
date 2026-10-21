@@ -222,22 +222,95 @@ export function kolomHarian() {
     },
     {
       judul: 'Lokasi',
-      sel: (h) => {
-        if (h.mode !== 'luar') return `<span class="text-muted">${esc(h.lokasi ?? '—')}</span>`;
-
-        // Koordinatnya ditautkan ke OpenStreetMap: gratis, tanpa API key, dan
-        // admin bisa memeriksa sendiri tanpa aplikasi ini menyimpan peta.
-        if (!Number.isFinite(h.lintang) || !Number.isFinite(h.bujur)) {
-          return `<span class="text-muted">${esc(h.lokasi ?? 'Luar kantor')}</span>`;
-        }
-        return `<a href="https://www.openstreetmap.org/?mlat=${h.lintang}&mlon=${h.bujur}#map=17/${h.lintang}/${h.bujur}"
-                   target="_blank" rel="noopener"
-                   title="Buka ${h.lintang}, ${h.bujur} di OpenStreetMap"
-                   class="text-merek underline-offset-2 hover:underline">Luar kantor</a>`;
-      },
+      sel: (h) => rincianLokasi(h),
     },
     { judul: 'Status', sel: (h) => lencanaAbsen(h.status) },
   ];
+}
+
+/**
+ * Jarak dalam meter menjadi teks pendek. `null` kalau tidak ada angkanya —
+ * jangan menulis "0 m", karena itu terbaca seolah titiknya tepat di kantor.
+ */
+export function formatJarak(meter) {
+  if (!Number.isFinite(meter)) return null;
+  const m = Math.max(0, Math.round(meter));
+  if (m < 1000) return `${m} m`;
+  return `${(m / 1000).toLocaleString('id-ID', { maximumFractionDigits: 1 })} km`;
+}
+
+/**
+ * Rincian lokasi satu baris absen.
+ *
+ * Untuk absen "di luar", jarak dan akurasi datang dari server. Di sini tidak
+ * ada perhitungan jarak sama sekali: yang ditampilkan hanya angka yang sudah
+ * dihitung dan disimpan saat absen. Akurasi ditulis apa adanya, termasuk saat
+ * angkanya kasar — admin perlu tahu itu perkiraan, bukan bukti.
+ */
+export function rincianLokasi(h, { ringkas = false } = {}) {
+  const luar =
+    h?.mode === 'luar' || (!h?.mode && (h?.lokasi === 'Dinas luar' || h?.lokasi === 'Luar kantor'));
+
+  const koordinat =
+    Number.isFinite(h?.lintang) && Number.isFinite(h?.bujur)
+      ? `${h.lintang}, ${h.bujur}`
+      : null;
+
+  const peta = koordinat
+    ? `<a href="https://www.openstreetmap.org/?mlat=${h.lintang}&mlon=${h.bujur}#map=18/${h.lintang}/${h.bujur}"
+           target="_blank" rel="noopener"
+           title="Buka ${h.lintang}, ${h.bujur} di OpenStreetMap"
+           class="shrink-0 text-merek underline-offset-2 hover:underline">Peta</a>`
+    : '';
+
+  // Alamat hasil reverse geocoding dari titik perangkat. Kalau layanan peta
+  // gagal, koordinatnya tetap ditulis supaya admin tahu titik absennya.
+  const tempat = h?.lokasi_teks
+    ? `<span class="block text-xs text-ink">${esc(h.lokasi_teks)}</span>`
+    : koordinat
+      ? `<span class="block text-xs text-muted">${esc(koordinat)}</span>`
+      : '';
+
+  if (!luar) {
+    // Absen "di perusahaan" juga menyimpan titik perangkat, jadi alamatnya
+    // ikut ditampilkan di bawah nama kantor — bukan hanya untuk dinas luar.
+    return `
+      <span class="block leading-tight">
+        <span class="block font-medium text-ink">${esc(h?.lokasi ?? '—')}</span>
+        ${tempat}
+        ${peta ? `<span class="mt-0.5 block text-xs">${peta}</span>` : ''}
+      </span>`;
+  }
+
+  const jarak = formatJarak(h?.jarak_m);
+  const akurasi = Number.isFinite(h?.akurasi) ? Math.round(h.akurasi) : null;
+  const kasar = h?.lokasi_meragukan === true || akurasi === null || akurasi > 50;
+  const kantor = h?.lokasi_kantor ? ` dari ${esc(h.lokasi_kantor)}` : ' dari kantor';
+  const jarakTeks = jarak ? `${jarak}${kantor}` : 'jarak tidak tercatat';
+  const akurasiTeks =
+    akurasi === null ? 'akurasi GPS tidak tercatat' : `GPS ±${akurasi} m${akurasi > 50 ? ' (kasar)' : ''}`;
+
+  if (ringkas) {
+    return `
+      <span class="flex flex-wrap items-baseline gap-x-1.5 gap-y-0.5">
+        <span class="font-medium text-ink">Dinas luar</span>
+        ${tempat}
+        <span class="text-muted">${esc(jarakTeks)}</span>
+        <span class="${kasar ? 'font-medium text-amber-700' : 'text-muted'}">${esc(akurasiTeks)}</span>
+        ${peta}
+      </span>`;
+  }
+
+  return `
+    <span class="block leading-tight">
+      <span class="block font-medium text-ink">Dinas luar</span>
+      ${tempat}
+      <span class="block text-xs text-muted">${esc(jarakTeks)}</span>
+      <span class="mt-0.5 flex flex-wrap items-center gap-x-1.5 gap-y-0.5 text-xs">
+        <span class="${kasar ? 'font-medium text-amber-700' : 'text-muted'}">${esc(akurasiTeks)}</span>
+        ${peta}
+      </span>
+    </span>`;
 }
 
 /** Keterangan saat datanya gagal dimuat. Dipasang menggantikan tabel. */
