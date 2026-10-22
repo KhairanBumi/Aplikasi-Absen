@@ -73,31 +73,42 @@
 @layer base {
   body {
     color: var(--color-ink);
+    background-color: #ebf6f7;
     font-family: var(--font-sans);
     -webkit-font-smoothing: antialiased;
     text-rendering: optimizeLegibility;
   }
 
   /* Wallpaper. Kaca hanya berguna kalau ada sesuatu di belakangnya untuk
-     dibiaskan — di atas latar rata, blur tidak menghasilkan apa pun. Karena
-     itu latarnya gradasi berwarna, bukan satu warna solid.
+     dibiaskan — di atas latar rata, blur tidak menghasilkan apa pun.
 
-     Orb di tengah (56% 46%) bukan hiasan: tanpa itu, kartu di bagian tengah
-     layar duduk di atas near-white dan terbaca sebagai kartu putih biasa,
-     bukan kaca. Rentang 72% membuatnya cukup samar untuk tidak mengganggu
-     teks — `muted` masih 4.7:1 di atasnya. */
-  body::before {
-    content: '';
+     Gradasinya digambar oleh src/latar.js dari resep Feral di gradient.json
+     (mode AIR di gradient.js). Blur 64px + skala 1.32 itu bagian dari ekspor:
+     tanpa blur, tepi tiap orb terlihat sebagai pita warna. */
+  .latar-feral {
     position: fixed;
     inset: 0;
     z-index: -1;
-    background:
-      radial-gradient(50rem 36rem at 4% -6%, #cdc7ff 0%, transparent 60%),
-      radial-gradient(46rem 34rem at 100% 0%, #b9d4ff 0%, transparent 62%),
-      radial-gradient(52rem 40rem at 92% 104%, #ffc4dd 0%, transparent 58%),
-      radial-gradient(46rem 34rem at 2% 104%, #b9e6ff 0%, transparent 60%),
-      radial-gradient(44rem 34rem at 56% 46%, #e4dcff 0%, transparent 72%),
-      linear-gradient(168deg, #fafaff 0%, #e9eef8 100%);
+    overflow: hidden;
+    pointer-events: none;
+    isolation: isolate;
+  }
+
+  .latar-feral canvas {
+    display: block;
+    width: 100%;
+    height: 100%;
+    transform: scale(1.32);
+  }
+
+  /* Butir film dari ekspor Feral. Opasitasnya diatur latar.js dari `noise`
+     di gradient.json (33 -> 0.165), sama seperti rumus grain di gradient.js. */
+  .latar-butir {
+    position: absolute;
+    inset: 0;
+    background-size: 256px 256px;
+    image-rendering: pixelated;
+    mix-blend-mode: overlay;
   }
 
   :focus-visible {

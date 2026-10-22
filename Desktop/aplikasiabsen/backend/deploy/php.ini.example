@@ -1,0 +1,23 @@
+; Simpan sebagai /etc/php/8.3/fpm/conf.d/99-absen.ini
+; lalu: systemctl reload php8.3-fpm
+;
+; post_max_size harus lebih besar dari body JSON. Foto 640x480 JPEG
+; sekitar 40-60 KB, base64 sekitar 55-80 KB; 2 MB memberi ruang lega.
+expose_php = Off
+display_errors = Off
+log_errors = On
+error_log = /var/log/php8.3-fpm.log
+date.timezone = Asia/Jakarta
+
+memory_limit = 256M
+post_max_size = 2M
+upload_max_filesize = 2M
+max_execution_time = 30
+max_input_time = 60
+
+opcache.enable = 1
+opcache.memory_consumption = 128
+opcache.interned_strings_buffer = 16
+opcache.max_accelerated_files = 10000
+opcache.validate_timestamps = 0
+opcache.save_comments = 1

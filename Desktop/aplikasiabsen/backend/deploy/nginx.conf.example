@@ -1,0 +1,81 @@
+# Contoh konfigurasi Nginx untuk Aplikasi Absen.
+# Ganti absen.example.com dan path root sesuai server.
+# Simpan sebagai /etc/nginx/sites-available/absen lalu symlink ke sites-enabled.
+
+server {
+    listen 80;
+    listen [::]:80;
+    server_name absen.example.com;
+
+    # Biarkan certbot mengakses tantangan HTTP-01.
+    location ^~ /.well-known/acme-challenge/ {
+        root /var/www/certbot;
+    }
+
+    location / {
+        return 301 https://$host$request_uri;
+    }
+}
+
+server {
+    listen 443 ssl http2;
+    listen [::]:443 ssl http2;
+    server_name absen.example.com;
+
+    root /var/www/aplikasiabsen/backend/public;
+    index index.php;
+
+    # Batas body JSON (foto base64 ±80 KB). PHP-FPM memakai batas yang sama.
+    client_max_body_size 2m;
+    client_body_timeout 15s;
+
+    ssl_certificate /etc/letsencrypt/live/absen.example.com/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/absen.example.com/privkey.pem;
+    ssl_protocols TLSv1.2 TLSv1.3;
+    ssl_prefer_server_ciphers off;
+    ssl_session_cache shared:SSL:10m;
+    ssl_session_timeout 1d;
+    ssl_session_tickets off;
+
+    server_tokens off;
+
+    # Header keamanan. Jangan menambah add_header di location, karena
+    # add_header di location akan menimpa header server ini.
+    add_header Strict-Transport-Security "max-age=31536000; includeSubDomains" always;
+    add_header X-Frame-Options "DENY" always;
+    add_header X-Content-Type-Options "nosniff" always;
+    add_header Referrer-Policy "strict-origin-when-cross-origin" always;
+    add_header Permissions-Policy "camera=(self), geolocation=(self)" always;
+    add_header Content-Security-Policy "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: blob:; connect-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'" always;
+
+    access_log /var/log/nginx/absen.access.log;
+    error_log /var/log/nginx/absen.error.log;
+
+    # Body terlalu besar harus tetap JSON, bukan halaman HTML Nginx.
+    error_page 413 = @json413;
+
+    location @json413 {
+        default_type application/json;
+        return 413 '{"message":"Foto terlalu besar. Maksimal 200 KB.","kode":"foto_terlalu_besar"}';
+    }
+
+    location / {
+        try_files $uri $uri/ /index.php?$query_string;
+    }
+
+    location ~ \.php$ {
+        try_files $uri =404;
+
+        include fastcgi_params;
+        fastcgi_param SCRIPT_FILENAME $document_root$fastcgi_script_name;
+        fastcgi_param HTTPS on;
+        fastcgi_pass unix:/run/php/php8.3-fpm.sock;
+        fastcgi_read_timeout 30s;
+        fastcgi_buffers 16 16k;
+        fastcgi_buffer_size 32k;
+    }
+
+    location ~ /\.(?!well-known).* {
+        deny all;
+    }
+}

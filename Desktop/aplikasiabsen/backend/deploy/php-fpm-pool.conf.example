@@ -1,0 +1,20 @@
+; Simpan sebagai /etc/php/8.3/fpm/pool.d/absen.conf
+; Sesuaikan pm.max_children dengan RAM VPS. 10 anak proses cukup untuk
+; ~100 absen/hari; jangan melebihi kapasitas RAM.
+[absen]
+user = www-data
+group = www-data
+
+listen = /run/php/php8.3-fpm.sock
+listen.owner = www-data
+listen.group = www-data
+listen.mode = 0660
+
+pm = dynamic
+pm.max_children = 10
+pm.start_servers = 2
+pm.min_spare_servers = 1
+pm.max_spare_servers = 3
+pm.max_requests = 500
+
+request_terminate_timeout = 30s

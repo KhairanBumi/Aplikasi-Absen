@@ -1,0 +1,98 @@
+{
+  "name": "Untitled blend",
+  "type": "mesh",
+  "profile": "sRGB",
+  "dividers": [
+    0.25,
+    0.5,
+    0.75
+  ],
+  "soften": 46,
+  "noise": 33,
+  "stops": [
+    {
+      "name": "INDIGO WHITE",
+      "hex": "#EBF6F7",
+      "rgb": [
+        235,
+        246,
+        247
+      ],
+      "oklch": [
+        0.9652,
+        0.0117,
+        203.5
+      ],
+      "cmyk": [
+        5,
+        0,
+        0,
+        3
+      ],
+      "position": 0.125
+    },
+    {
+      "name": "STOREROOM BLUE",
+      "hex": "#008899",
+      "rgb": [
+        0,
+        136,
+        153
+      ],
+      "oklch": [
+        0.5743,
+        0.0994,
+        210.1
+      ],
+      "cmyk": [
+        100,
+        11,
+        0,
+        40
+      ],
+      "position": 0.375
+    },
+    {
+      "name": "PALE YELLOW",
+      "hex": "#F8E58C",
+      "rgb": [
+        248,
+        229,
+        140
+      ],
+      "oklch": [
+        0.9183,
+        0.1115,
+        97.6
+      ],
+      "cmyk": [
+        0,
+        8,
+        44,
+        3
+      ],
+      "position": 0.625
+    },
+    {
+      "name": "YOUNG BAMBOO",
+      "hex": "#68BE8D",
+      "rgb": [
+        104,
+        190,
+        141
+      ],
+      "oklch": [
+        0.7339,
+        0.1109,
+        157.2
+      ],
+      "cmyk": [
+        45,
+        0,
+        26,
+        25
+      ],
+      "position": 0.875
+    }
+  ]
+}

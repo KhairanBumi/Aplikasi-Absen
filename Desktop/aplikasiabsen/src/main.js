@@ -1,6 +1,11 @@
 import './style.css';
 import { pengguna, segarkanSesi } from './api.js';
+import { pasangLatar } from './latar.js';
 import { semuaButir } from './menu.js';
+
+// Latar Feral dipasang lebih dulu supaya kaca di layar pertama sudah punya
+// sesuatu untuk dibiaskan sejak frame pertama.
+pasangLatar();
 
 // Layar yang punya berkas sendiri. Menu yang belum punya layar memakai berkas
 // bersama `segera.js`, jadi tidak ada tautan menu yang menabrak.
