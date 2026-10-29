@@ -129,6 +129,7 @@ export default {
           : `${baris.length} pengajuan`;
 
       kotakDaftar.innerHTML = tabel({
+        judul: 'Daftar pengajuan izin',
         kolom,
         baris,
         kosong:

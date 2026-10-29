@@ -119,6 +119,7 @@ export default {
         : `${aktif} aktif dari ${semua.length} anak magang`;
 
       kotakDaftar.innerHTML = tabel({
+        judul: 'Daftar anak magang',
         kolom,
         baris,
         // Keadaan kosong inilah yang pertama dilihat admin di aplikasi ini —

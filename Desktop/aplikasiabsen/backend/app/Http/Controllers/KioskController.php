@@ -7,6 +7,7 @@ use App\Models\Audit;
 use App\Models\Lokasi;
 use App\Models\Pengguna;
 use App\Models\PerangkatKiosk;
+use App\Models\PercobaanMasuk;
 use App\Models\Shift;
 use App\Support\Foto;
 use App\Support\Geo;
@@ -65,6 +66,12 @@ class KioskController extends Controller
         return response()->json([
             'id' => $lokasi->id,
             'nama' => $lokasi->nama,
+            // Titik dan radius ikut dikirim supaya kiosk bisa menunjukkan
+            // "di dalam/di luar radius" tanpa menebak. Server tetap satu-satunya
+            // yang memutuskan jarak saat absen; angka ini hanya tampilan.
+            'lintang' => $lokasi->lintang !== null ? (float) $lokasi->lintang : null,
+            'bujur' => $lokasi->bujur !== null ? (float) $lokasi->bujur : null,
+            'radius_m' => (int) $lokasi->radius_m,
             'kiosk_id' => $perangkatId !== '' ? $perangkatId : null,
         ]);
     }
@@ -81,12 +88,16 @@ class KioskController extends Controller
             'bujur' => ['nullable', 'numeric', 'between:-180,180'],
             'akurasi' => ['nullable', 'numeric', 'min:0'],
             'foto' => ['required', 'string'],
+            'kunci_idempoten' => ['nullable', 'string', 'min:8', 'max:80', 'regex:/^[A-Za-z0-9._-]+$/'],
         ], [
             'nip.required' => 'NIP wajib diisi.',
             'pin.required' => 'PIN wajib diisi.',
             'pin.regex' => 'PIN harus 4 sampai 6 angka.',
             'kiosk_id.required' => 'Identitas perangkat kiosk wajib dikirim.',
             'foto.required' => 'Foto wajib diambil sebelum absen.',
+            'kunci_idempoten.min' => 'Kunci idempoten minimal 8 karakter.',
+            'kunci_idempoten.max' => 'Kunci idempoten maksimal 80 karakter.',
+            'kunci_idempoten.regex' => 'Kunci idempoten hanya boleh berisi huruf, angka, titik, garis bawah, dan tanda hubung.',
             'lintang.numeric' => 'Lintang harus berupa angka.',
             'lintang.between' => 'Lintang harus antara -90 dan 90.',
             'bujur.numeric' => 'Bujur harus berupa angka.',
@@ -99,6 +110,7 @@ class KioskController extends Controller
         $pin = (string) $data['pin'];
         $kioskId = trim($data['kiosk_id']);
         $ip = $request->ip() ?? 'tidak-diketahui';
+        $kunciIdempoten = $data['kunci_idempoten'] ?? null;
 
         $kunci = ["absen:{$nip}:{$ip}", "absen-kiosk:{$kioskId}"];
 
@@ -119,12 +131,16 @@ class KioskController extends Controller
                 return $this->terlaluBanyak();
             }
 
+            $this->catatPercobaan($nip, $pengguna?->id, $kioskId, $ip, false, 'kredensial_salah');
+
             return $this->galat('NIP atau PIN salah.', 401, 'kredensial_salah');
         }
 
         RateLimiter::clear($kunci[0]);
 
         if (! $pengguna->aktif) {
+            $this->catatPercobaan($nip, $pengguna->id, $kioskId, $ip, false, 'akun_nonaktif');
+
             return $this->galat(
                 'Akun Anda sudah dinonaktifkan. Hubungi admin.',
                 403,
@@ -135,6 +151,8 @@ class KioskController extends Controller
         $perangkat = PerangkatKiosk::with('lokasi')->find($kioskId);
 
         if (! $perangkat || ! $perangkat->aktif) {
+            $this->catatPercobaan($nip, $pengguna->id, $kioskId, $ip, false, 'perangkat_ditolak');
+
             return $this->galat(
                 'Perangkat kiosk tidak dikenal atau tidak aktif.',
                 403,
@@ -162,6 +180,22 @@ class KioskController extends Controller
             );
         }
 
+        if ($kunciIdempoten !== null) {
+            $lama = Absen::where('kiosk_id', $kioskId)
+                ->where('kunci_idempoten', $kunciIdempoten)
+                ->first();
+
+            if ($lama) {
+                return $lama->pengguna_id === $pengguna->id
+                    ? $this->jawabanAbsen($lama, true)
+                    : $this->galat(
+                        'Kunci idempoten sudah dipakai untuk pengguna lain.',
+                        409,
+                        'kunci_bentrok'
+                    );
+            }
+        }
+
         $mode = in_array($data['mode'] ?? 'kantor', ['kantor', 'luar'], true)
             ? ($data['mode'] ?? 'kantor')
             : 'kantor';
@@ -178,25 +212,21 @@ class KioskController extends Controller
             );
         }
 
-        if ($mode === 'luar') {
-            if ($lat === null || $lon === null || $akurasi === null) {
-                return $this->galat(
-                    'Mode luar wajib mengirim lintang, bujur, dan akurasi GPS.',
-                    422,
-                    'koordinat_tidak_lengkap'
-                );
-            }
-
-            $akurasiMaks = (float) config('absensi.akurasi_max_m', 150);
-
-            if ($akurasi > $akurasiMaks) {
-                return $this->galat(
-                    'Akurasi GPS terlalu kasar ('.round($akurasi).' m). Jarak dari kantor tidak memengaruhi pemeriksaan ini. Maksimal '.round($akurasiMaks).' m; nyalakan GPS presisi, tunggu sampai akurasinya membaik, lalu coba lagi.',
-                    422,
-                    'akurasi_terlalu_kasar'
-                );
-            }
+        // Akurasi tanpa koordinat tidak bisa dipakai menghitung apa pun.
+        // Sebaliknya, koordinat tanpa akurasi masih berguna; itu hanya
+        // ditandai sebagai lokasi meragukan.
+        if ($akurasi !== null && ($lat === null || $lon === null)) {
+            return $this->galat(
+                'Akurasi GPS hanya boleh dikirim bersama lintang dan bujur.',
+                422,
+                'koordinat_tidak_lengkap'
+            );
         }
+
+        // Mode luar tidak menolak absen tanpa koordinat atau dengan akurasi
+        // kasar. Perangkat kiosk bisa tidak punya layanan lokasi; absennya
+        // tetap diterima, lalu ditandai di rekap supaya admin bisa memeriksa.
+        // Jarak dari kantor juga tidak pernah dipakai menolak dinas luar.
 
         $foto = $this->bacaFoto($data['foto']);
 
@@ -253,7 +283,12 @@ class KioskController extends Controller
         }
 
         $akurasiInt = $akurasi !== null ? (int) round($akurasi) : null;
-        $meragukan = $akurasi !== null && $akurasi > 50;
+
+        // "Meragukan" mencakup titik yang kasar dan absen luar yang dikirim
+        // tanpa koordinat sama sekali. Mode kantor tanpa GPS tetap normal.
+        $meragukan = $mode === 'luar'
+            ? ($lat === null || $akurasi === null || $akurasi > 50)
+            : ($akurasi !== null && $akurasi > 50);
         $lokasiTeks = ($lat !== null && $lon !== null)
             ? Nominatim::alamat($lat, $lon)
             : null;
@@ -286,10 +321,27 @@ class KioskController extends Controller
                 'user_agent' => $request->userAgent()
                     ? mb_substr($request->userAgent(), 0, 255)
                     : null,
+                'kunci_idempoten' => $kunciIdempoten,
                 'created_at' => now(),
             ]);
         } catch (QueryException $e) {
             Foto::hapus($fotoPath);
+
+            if ($kunciIdempoten !== null) {
+                $lama = Absen::where('kiosk_id', $kioskId)
+                    ->where('kunci_idempoten', $kunciIdempoten)
+                    ->first();
+
+                if ($lama) {
+                    return $lama->pengguna_id === $pengguna->id
+                        ? $this->jawabanAbsen($lama, true)
+                        : $this->galat(
+                            'Kunci idempoten sudah dipakai untuk pengguna lain.',
+                            409,
+                            'kunci_bentrok'
+                        );
+                }
+            }
 
             if ($this->duplikat($e)) {
                 return $this->galat(
@@ -315,17 +367,46 @@ class KioskController extends Controller
             'lokasi_meragukan' => $meragukan,
         ], $request);
 
+        $this->catatPercobaan($nip, $pengguna->id, $kioskId, $ip, true);
+
+        return $this->jawabanAbsen($absen, false);
+    }
+
+    private function jawabanAbsen(Absen $absen, bool $idempoten): JsonResponse
+    {
         return response()->json([
-            'tipe' => $tipe,
-            'nama' => $pengguna->nama,
-            'nip' => $pengguna->nip,
+            'id' => $absen->id,
+            'tipe' => $absen->tipe,
+            'nama' => $absen->nama_salinan,
+            'nip' => $absen->nip_salinan,
             'waktu' => $absen->waktu->toIso8601String(),
-            'lokasi_id' => $lokasi->id,
-            'mode' => $mode,
-            'jarak_m' => $jarak,
-            'akurasi' => $akurasiInt,
-            'lokasi_teks' => $lokasiTeks,
-            'lokasi_meragukan' => $meragukan,
+            'lokasi_id' => $absen->lokasi_id,
+            'mode' => $absen->mode,
+            'jarak_m' => $absen->jarak_m,
+            'akurasi' => $absen->akurasi,
+            'lokasi_teks' => $absen->lokasi_teks,
+            'lokasi_tersedia' => $absen->lintang !== null && $absen->bujur !== null,
+            'lokasi_meragukan' => $absen->lokasi_meragukan,
+            'idempoten' => $idempoten,
+        ]);
+    }
+
+    private function catatPercobaan(
+        string $nip,
+        ?int $penggunaId,
+        string $kioskId,
+        string $ip,
+        bool $berhasil,
+        ?string $alasan = null
+    ): void {
+        PercobaanMasuk::create([
+            'pengguna_id' => $penggunaId,
+            'nip' => $nip,
+            'kiosk_id' => $kioskId,
+            'ip' => $ip,
+            'berhasil' => $berhasil,
+            'alasan' => $alasan,
+            'created_at' => now(),
         ]);
     }
 

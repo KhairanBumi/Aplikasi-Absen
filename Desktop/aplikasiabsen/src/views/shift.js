@@ -73,6 +73,7 @@ export default {
     function gambar() {
       elJumlah.textContent = `${semua.length} shift`;
       kotakDaftar.innerHTML = tabel({
+        judul: 'Daftar shift kerja',
         kolom,
         baris: semua,
         kosong: 'Belum ada shift. Tanpa shift, tidak ada yang bisa dinilai telat.',

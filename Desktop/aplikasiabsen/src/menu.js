@@ -95,6 +95,23 @@ export const MENU = [
       },
     ],
   },
+  {
+    bagian: 'Sistem',
+    butir: [
+      {
+        jalur: '#/audit',
+        label: 'Log Audit',
+        peran: ['admin'],
+        ikon: '<path d="M7 3.5h10a1 1 0 0 1 1 1v16l-3-2-3 2-3-2-3 2v-16a1 1 0 0 1 1-1Z"/><path d="M9.5 8h5"/><path d="M9.5 11.5h5"/>',
+      },
+      {
+        jalur: '#/anomali',
+        label: 'Anomali',
+        peran: ['admin'],
+        ikon: '<path d="M12 3.5 21 20H3L12 3.5Z"/><path d="M12 9v5"/><path d="M12 17.2h.01"/>',
+      },
+    ],
+  },
 ];
 
 const SEMUA_PERAN = ['admin', 'magang'];

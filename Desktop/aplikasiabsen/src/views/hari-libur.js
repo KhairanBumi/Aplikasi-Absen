@@ -71,6 +71,7 @@ export default {
         ? `${baris.length} dari ${semua.length} hari libur`
         : `${semua.length} hari libur terdaftar`;
       kotakDaftar.innerHTML = tabel({
+        judul: 'Daftar hari libur',
         kolom,
         baris,
         kosong: cari

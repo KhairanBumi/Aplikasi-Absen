@@ -184,7 +184,7 @@ CREATE TABLE IF NOT EXISTS `lokasi` (
   `alamat` varchar(255) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
   `lintang` decimal(10,7) NOT NULL,
   `bujur` decimal(10,7) NOT NULL,
-  `radius_m` int unsigned NOT NULL DEFAULT '50',
+  `radius_m` int unsigned NOT NULL DEFAULT '250',
   `aktif` tinyint(1) NOT NULL DEFAULT '1',
   `created_at` timestamp NULL DEFAULT NULL,
   `updated_at` timestamp NULL DEFAULT NULL,
@@ -194,7 +194,7 @@ CREATE TABLE IF NOT EXISTS `lokasi` (
 
 -- Dumping data for table absen.lokasi: ~0 rows (approximately)
 INSERT INTO `lokasi` (`id`, `nama`, `alamat`, `lintang`, `bujur`, `radius_m`, `aktif`, `created_at`, `updated_at`) VALUES
-	(1, 'Kantor Cabang Karimunjawa', 'Jl. Raya Kalirungkut No.25, Kali Rungkut, Kec. Rungkut, Surabaya, Jawa Timur', -7.3207800, 112.7704700, 50, 1, '2026-10-21 07:39:12', '2026-10-21 08:52:02');
+	(1, 'Kantor Cabang Karimunjawa', 'Jl. Raya Kalirungkut No.25, Kali Rungkut, Kec. Rungkut, Surabaya, Jawa Timur', -7.3207800, 112.7704700, 250, 1, '2026-10-21 07:39:12', '2026-10-21 08:52:02');
 
 -- Dumping structure for table absen.migrations
 CREATE TABLE IF NOT EXISTS `migrations` (

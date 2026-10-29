@@ -7,14 +7,22 @@ return [
 
     'foto_max_bytes' => 200 * 1024,
 
-    // Meter. 150 memberi ruang untuk perangkat tanpa GPS (perkiraan Wi-Fi/IP),
-    // tetapi titik di atas 50 m tetap ditandai kasar untuk admin.
-    'akurasi_max_m' => 150,
-
     'nominatim_user_agent' => env(
         'NOMINATIM_USER_AGENT',
         'aplikasi-absen/1.0 (admin@kantor.id)'
     ),
+
+    'ip_kantor' => array_values(array_filter(array_map(
+        'trim',
+        explode(',', (string) env('ABSEN_IP_KANTOR', ''))
+    ))),
+
+    'anomali_jarak_m' => (int) env('ABSEN_ANOMALI_JARAK_M', 100000),
+
+    'foto_simpan_hari' => (int) env('ABSEN_FOTO_SIMPAN_HARI', 180),
+    'audit_simpan_hari' => (int) env('ABSEN_AUDIT_SIMPAN_HARI', 730),
+
+    'uji_beban_pin' => env('ABSEN_UJI_BEBAN_PIN'),
 
     'seed' => [
         'admin_nip' => env('ADMIN_NIP'),
@@ -27,7 +35,7 @@ return [
         'lokasi_alamat' => env('SEED_LOKASI_ALAMAT', 'Jl. Jenderal Sudirman No. 1, Jakarta'),
         'lokasi_lintang' => (float) env('SEED_LOKASI_LINTANG', -6.2246),
         'lokasi_bujur' => (float) env('SEED_LOKASI_BUJUR', 106.8094),
-        'lokasi_radius_m' => (int) env('SEED_LOKASI_RADIUS_M', 50),
+        'lokasi_radius_m' => (int) env('SEED_LOKASI_RADIUS_M', 250),
 
         'shift_nama' => env('SEED_SHIFT_NAMA', 'Reguler'),
         'shift_masuk' => env('SEED_SHIFT_MASUK', '08:00'),

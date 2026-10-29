@@ -12,6 +12,7 @@ import { api, pengguna, MODE_TIRUAN } from '../api.js';
 import { esc, jam, tanggalPanjang, jamBerjalan, inisial } from '../ui.js';
 import { pasangKerangka } from '../kerangka.js';
 import { KARTU, TOMBOL_NAV, kartuAngka, rincianLokasi } from '../tabel.js';
+import { panggung } from '../animasi.js';
 
 const IKON_KIRI = `
   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9"
@@ -100,6 +101,7 @@ function dashboardAdmin(isi, p) {
   const hariIni = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Jakarta' });
   let aktif = hariIni;
   let hidup = true;
+  const animasi = panggung();
 
   isi.innerHTML = `
     <section class="relative overflow-hidden rounded-[1.75rem] bg-merek p-6 shadow-naik-besar
@@ -153,13 +155,16 @@ function dashboardAdmin(isi, p) {
   const elLabel = isi.querySelector('[data-label-tanggal]');
   const tombolMaju = isi.querySelector('[data-maju]');
 
-  async function muat(tanggal) {
+  animasi.muncul(isi.querySelector('section'), { y: 18, durasi: 0.55 });
+  animasi.muncul(tombolMaju.closest('.kaca'), { y: 10, delay: 0.08 });
+
+  async function muat(tanggal, arah = 0) {
     aktif = tanggal;
     elJudul.textContent = tanggalPanjang(`${tanggal}T00:00:00+07:00`);
     elLabel.textContent = labelHari(tanggal, hariIni);
     tombolMaju.disabled = tanggal >= hariIni;
 
-    kotak.innerHTML = `<p class="py-16 text-center text-sm text-muted">Memuat data kehadiran…</p>`;
+    kotak.innerHTML = `<p class="animate-pulse py-16 text-center text-sm text-muted">Memuat data kehadiran…</p>`;
 
     let d;
     try {
@@ -188,6 +193,14 @@ function dashboardAdmin(isi, p) {
         (a.lokasi_meragukan || !Number.isFinite(a.akurasi) || a.akurasi > 50),
     );
 
+    // Bilah kehadiran hanya bermakna kalau hari ini memang ada yang diharapkan
+    // masuk. Persentase dijepit 0–100 supaya data yang aneh tidak membuat
+    // bilahnya melewati kartu.
+    const persen =
+      !libur && r.total > 0
+        ? Math.min(100, Math.max(0, Math.round((r.sudah_masuk / r.total) * 100)))
+        : null;
+
     kotak.innerHTML = `
       ${
         libur
@@ -215,6 +228,22 @@ function dashboardAdmin(isi, p) {
           r.telat > 0 ? 'text-rose-600' : 'text-ink',
         )}
       </div>
+
+      ${
+        persen === null
+          ? ''
+          : `<div class="mt-4 flex items-center gap-3 px-1">
+               <div class="h-2 flex-1 overflow-hidden rounded-full bg-ink/8" role="progressbar"
+                    aria-label="Kehadiran hari ini" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${persen}">
+                 <div data-progres data-persen="${persen}"
+                      class="h-full rounded-full bg-merek transition-[width] duration-700 ease-apple"
+                      style="width:0%"></div>
+               </div>
+               <p class="angka-rata shrink-0 text-xs font-medium text-muted">
+                 <span data-angka>${persen}</span>% hadir
+               </p>
+             </div>`
+      }
 
       <div class="mt-6 grid items-start gap-6 xl:grid-cols-2">
         <section class="${KARTU}">
@@ -286,7 +315,7 @@ function dashboardAdmin(isi, p) {
           adaGpsKasar
             ? `<p class="mt-3 flex items-start gap-2.5 rounded-xl border border-amber-500/25 bg-amber-500/10 px-3.5 py-2.5 text-xs text-amber-900">
                  <span class="mt-0.5 grid size-4 shrink-0 place-items-center rounded-full bg-amber-500/20 font-semibold">!</span>
-                 <span>Ada absen dinas luar dengan akurasi GPS rendah. Titik dan alamatnya bisa meleset — buka <span class="font-medium">Peta</span> untuk memeriksa titik aslinya.</span>
+                 <span>Ada absen dinas luar tanpa akurasi atau dengan akurasi GPS rendah. Titik dan alamatnya bisa meleset — buka <span class="font-medium">Peta</span> untuk memeriksa titik aslinya.</span>
                </p>`
             : ''
         }
@@ -337,19 +366,36 @@ function dashboardAdmin(isi, p) {
           : ''
       }`;
 
+    [...kotak.children].forEach((el, i) => {
+      animasi.muncul(el, { y: 16, x: arah * 18, delay: i * 0.055 });
+    });
+
+    kotak.querySelectorAll('[data-angka]').forEach((el, i) => {
+      const nilai = Number(el.textContent);
+      if (Number.isFinite(nilai)) animasi.hitung(el, nilai, { delay: 0.15 + i * 0.05 });
+    });
+
+    const progres = kotak.querySelector('[data-progres]');
+    if (progres) {
+      requestAnimationFrame(() => {
+        progres.style.width = `${progres.dataset.persen}%`;
+      });
+    }
+
     kotak.querySelector('[data-ulang]')?.addEventListener('click', () => muat(tanggal));
   }
 
-  isi.querySelector('[data-mundur]').addEventListener('click', () => muat(gantiHari(aktif, -1)));
+  isi.querySelector('[data-mundur]').addEventListener('click', () => muat(gantiHari(aktif, -1), -1));
   isi.querySelector('[data-maju]').addEventListener('click', () => {
     const berikut = gantiHari(aktif, 1);
-    if (berikut <= hariIni) muat(berikut);
+    if (berikut <= hariIni) muat(berikut, 1);
   });
 
   muat(hariIni);
 
   return () => {
     hidup = false;
+    animasi.berhenti();
   };
 }
 

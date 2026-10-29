@@ -48,14 +48,6 @@ class AdminMagangController extends Controller
             return $bentrok;
         }
 
-        if ($this->pinDipakai((string) $data['pin'])) {
-            return $this->galat(
-                'PIN sudah dipakai pengguna lain. Pilih PIN lain.',
-                409,
-                'pin_dipakai'
-            );
-        }
-
         $pengguna = Pengguna::create([
             'nama' => $data['nama'],
             'nip' => $data['nip'],
@@ -125,14 +117,9 @@ class AdminMagangController extends Controller
         $pinDiubah = false;
 
         if ($pinBaru !== null && $pinBaru !== '') {
-            if ($this->pinDipakai((string) $pinBaru, $pengguna->id)) {
-                return $this->galat(
-                    'PIN sudah dipakai pengguna lain. Pilih PIN lain.',
-                    409,
-                    'pin_dipakai'
-                );
-            }
-
+            // PIN tidak harus unik. Ia berfungsi seperti kata sandi, dan
+            // memaksa semua magang memilih angka yang belum dipakai orang lain
+            // justru membuat PIN mudah ditebak. Identitas tetap dijaga NIP.
             $data['pin_hash'] = Hash::make((string) $pinBaru);
             $pinDiubah = true;
         }
@@ -239,23 +226,6 @@ class AdminMagangController extends Controller
         }
 
         return null;
-    }
-
-    private function pinDipakai(string $pin, ?int $kecuali = null): bool
-    {
-        $query = Pengguna::query()->select(['id', 'pin_hash']);
-
-        if ($kecuali) {
-            $query->where('id', '!=', $kecuali);
-        }
-
-        foreach ($query->cursor() as $lain) {
-            if ($lain->pin_hash && Hash::check($pin, $lain->pin_hash)) {
-                return true;
-            }
-        }
-
-        return false;
     }
 
     private function pesan(): array

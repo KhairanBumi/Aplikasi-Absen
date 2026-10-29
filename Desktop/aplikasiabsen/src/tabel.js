@@ -85,7 +85,7 @@ export function kepalaDaftar({ judul, tambah, contohCari = '' }) {
  * Tabel daftar.
  * `kolom` berisi { judul, kelas, sel(baris) -> HTML }.
  */
-export function tabel({ kolom, baris, kosong = 'Belum ada data.' }) {
+export function tabel({ judul, kolom, baris, kosong = 'Belum ada data.' }) {
   const isiBaris =
     baris.length === 0
       ? `<tr><td colspan="${kolom.length}" class="px-4 py-14 text-center text-muted">${esc(kosong)}</td></tr>`
@@ -101,6 +101,7 @@ export function tabel({ kolom, baris, kosong = 'Belum ada data.' }) {
   return `
     <div class="mt-5 overflow-x-auto">
       <table class="w-full min-w-[42rem] border-collapse text-sm">
+        <caption class="sr-only">${esc(judul)}</caption>
         <thead>
           <tr class="border-b border-ink/8">
             ${kolom
@@ -336,7 +337,7 @@ export function kartuAngka(label, nilai, catatan = '', warna = 'text-ink') {
   return `
     <div class="${KARTU}">
       <p class="text-sm text-muted">${esc(label)}</p>
-      <p class="angka-rata mt-2 text-3xl font-semibold tracking-tight ${warna}">${esc(nilai)}</p>
+      <p class="angka-rata mt-2 text-3xl font-semibold tracking-tight ${warna}"><span data-angka>${esc(nilai)}</span></p>
       <p class="mt-1 text-xs text-muted">${esc(catatan)}</p>
     </div>`;
 }

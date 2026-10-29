@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\Absen;
 use App\Models\HariLibur;
+use App\Models\Izin;
 use App\Models\Pengguna;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -49,25 +50,47 @@ class DashboardController extends Controller
             ->orderBy('waktu')
             ->get();
 
-        $idAbsen = $absenHari->pluck('pengguna_id')->unique()->values()->all();
+        $izinHari = Izin::with('pengguna')
+            ->where('status', 'disetujui')
+            ->whereIn('jenis', Izin::JENIS)
+            ->whereDate('mulai', '<=', $tanggalStr)
+            ->whereDate('selesai', '>=', $tanggalStr)
+            ->orderBy('id')
+            ->get()
+            ->keyBy('pengguna_id');
+
+        $idTerlibat = $absenHari->pluck('pengguna_id')
+            ->merge($izinHari->keys())
+            ->unique()
+            ->values()
+            ->all();
 
         $kandidat = Pengguna::with(['shift', 'lokasi'])
-            ->where(function ($q) use ($tanggalStr, $idAbsen) {
+            ->where(function ($q) use ($tanggalStr, $idTerlibat) {
                 $q->where(function ($q) use ($tanggalStr) {
                     $q->where('peran', 'magang')
                         ->where('aktif', true)
                         ->whereDate('masuk_kerja', '<=', $tanggalStr);
-                })->orWhere(function ($q) use ($idAbsen) {
-                    $q->where('peran', 'admin')->whereIn('id', $idAbsen);
-                });
+                })->orWhereIn('id', $idTerlibat);
             })
             ->get();
 
         $masuk = $absenHari->where('tipe', 'masuk')->keyBy('pengguna_id');
 
         $sudahMasuk = $kandidat->filter(fn (Pengguna $p) => $masuk->has($p->id))->values();
+
+        $izinOrang = $hariKerja
+            ? $kandidat->filter(
+                fn (Pengguna $p) => $izinHari->has($p->id) && ! $masuk->has($p->id)
+            )->values()
+            : collect();
+
+        $idIzin = array_flip($izinOrang->pluck('id')->all());
+
         $belumMasuk = $hariKerja
-            ? $kandidat->reject(fn (Pengguna $p) => $masuk->has($p->id))->values()
+            ? $kandidat->reject(
+                fn (Pengguna $p) => $masuk->has($p->id) || isset($idIzin[$p->id])
+            )->values()
             : collect();
 
         $idSudahMasuk = $sudahMasuk->pluck('id')->all();
@@ -86,10 +109,10 @@ class DashboardController extends Controller
             'hari_kerja' => $hariKerja,
             'keterangan_libur' => $keteranganLibur,
             'ringkasan' => [
-                'total' => $sudahMasuk->count() + $belumMasuk->count(),
+                'total' => $sudahMasuk->count() + $belumMasuk->count() + $izinOrang->count(),
                 'sudah_masuk' => $sudahMasuk->count(),
                 'belum_masuk' => $belumMasuk->count(),
-                'izin' => 0,
+                'izin' => $izinOrang->count(),
                 'telat' => $terlambat->count(),
             ],
             'terlambat' => $terlambat->map(fn (Absen $a) => [
@@ -109,7 +132,20 @@ class DashboardController extends Controller
                 'divisi' => $p->divisi,
                 'shift' => $p->shift?->nama,
             ])->values(),
-            'izin' => [],
+            'izin' => $izinOrang->map(function (Pengguna $p) use ($izinHari) {
+                $izin = $izinHari->get($p->id);
+
+                return [
+                    'id' => $izin->id,
+                    'nama' => $p->nama,
+                    'nip' => $p->nip,
+                    'divisi' => $p->divisi,
+                    'jenis' => $izin->jenis,
+                    'mulai' => $izin->mulai->format('Y-m-d'),
+                    'selesai' => $izin->selesai->format('Y-m-d'),
+                    'alasan' => $izin->alasan,
+                ];
+            })->values(),
             'aktivitas' => $aktivitas->map(fn (Absen $a) => [
                 'id' => $a->id,
                 'nama' => $a->pengguna?->nama ?? $a->nama_salinan,

@@ -11,7 +11,7 @@
 // kalau tidak, laporannya melaporkan orang yang sudah keluar sebagai mangkir
 // selama dua minggu.
 
-import { api } from '../api.js';
+import { api, pengguna } from '../api.js';
 import {
   esc,
   inisial,
@@ -31,42 +31,8 @@ import {
   TOMBOL_BARIS,
   TOMBOL_HALUS,
 } from '../tabel.js';
-
-/**
- * Unduh sebagai berkas CSV.
- *
- * Pemisahnya titik koma, bukan koma. Excel di komputer berbahasa Indonesia
- * memakai koma sebagai pemisah desimal, jadi berkas berpemisah koma akan
- * membuka seluruh isinya di satu kolom. Titik koma adalah yang diharapkan
- * Excel di sana.
- *
- * BOM di depan ditulis eksplisit supaya huruf beraksen dan tanda baca Indonesia
- * tidak berubah jadi simbol aneh saat Excel menebak sendiri encoding-nya.
- */
-function unduhCSV(namaBerkas, kepala, baris) {
-  const sel = (nilai) => {
-    let teks = String(nilai ?? '');
-
-    // Excel/LibreOffice mengeksekusi sel yang dimulai dengan =, +, -, atau @
-    // sebagai rumus. Nama magang "=1+1" tidak boleh berubah jadi angka 2 saat
-    // berkasnya dibuka. Awali dengan apostrof supaya diperlakukan sebagai teks.
-    if (/^[=+\-@\t\r]/.test(teks)) teks = `'${teks}`;
-
-    return `"${teks.replace(/"/g, '""')}"`;
-  };
-  const isi = [kepala, ...baris].map((b) => b.map(sel).join(';')).join('\r\n');
-
-  const tautan = document.createElement('a');
-  tautan.href = URL.createObjectURL(new Blob([`\ufeff${isi}`], { type: 'text/csv;charset=utf-8' }));
-  tautan.download = namaBerkas;
-  document.body.appendChild(tautan);
-  tautan.click();
-  tautan.remove();
-
-  // URL-nya dicabut setelah jeda singkat. Melepasnya pada tick yang sama dengan
-  // klik membatalkan unduhannya di sebagian browser.
-  setTimeout(() => URL.revokeObjectURL(tautan.href), 2000);
-}
+import { unduhCSV } from '../csv.js';
+import { susunMatriksCSV } from '../laporan-csv.js';
 
 export default {
   judul: 'Rekap & Laporan',
@@ -132,7 +98,12 @@ export default {
             </div>
             <button type="button" data-unduh class="${TOMBOL_HALUS} ml-auto">Unduh CSV</button>
           </div>
-          ${tabel({ kolom: kolomRekap(), baris: rekap.data, kosong: 'Belum ada data pada bulan ini.' })}
+          ${tabel({
+            judul: 'Rekap absen bulanan',
+            kolom: kolomRekap(),
+            baris: rekap.data,
+            kosong: 'Belum ada data pada bulan ini.',
+          })}
         </div>`;
 
       const p = elPemilih();
@@ -267,14 +238,19 @@ export default {
                    © OpenStreetMap contributors.
                    ${
                      luarKasar.length > 0
-                       ? `<span class="mt-1 block font-medium text-amber-700">${luarKasar.length} di antaranya berakurasi kasar — buka Peta untuk memeriksa titiknya.</span>`
+                       ? `<span class="mt-1 block font-medium text-amber-700">${luarKasar.length} di antaranya tanpa akurasi atau berakurasi kasar — buka Peta untuk memeriksa titiknya.</span>`
                        : ''
                    }
                  </div>`
               : ''
           }
 
-          ${tabel({ kolom: kolomHarian(), baris: hari, kosong: 'Belum ada catatan pada bulan ini.' })}
+          ${tabel({
+            judul: 'Rincian absen harian',
+            kolom: kolomHarian(),
+            baris: hari,
+            kosong: 'Belum ada catatan pada bulan ini.',
+          })}
         </div>`;
     }
 
@@ -371,41 +347,42 @@ export default {
         return;
       }
 
-      if (e.target.closest('[data-unduh]')) unduh();
+      if (e.target.closest('[data-unduh]')) unduh(e.target.closest('[data-unduh]'));
     });
 
-    async function unduh() {
-      if (!rekap) return;
+    async function unduh(tombol) {
+      if (!tombol || tombol.disabled) return;
+
+      // Matriks butuh status tiap hari, dan itu hanya dikirim server kalau
+      // diminta lewat `rinci=1`. Layar rekap sengaja tidak memuatnya supaya
+      // balasan bulanan tetap ringan; unduhan mengambil sekali lagi.
+      const teksAsli = tombol.textContent;
+      tombol.disabled = true;
+      tombol.textContent = 'Menyiapkan…';
 
       try {
-        unduhCSV(
-          `rekap-absen-${bulan}.csv`,
-          ['NIP', 'Nama', 'Divisi', 'NIK', 'Shift', 'Dinas luar', 'Dinas luar GPS kasar', 'Hadir', 'Terlambat', 'Menit terlambat', 'Izin', 'Cuti', 'Sakit', 'Tanpa catatan'],
-          rekap.data.map((u) => [
-            u.nip,
-            u.nama,
-            u.divisi,
-            u.nik,
-            u.shift,
-            u.luar ?? 0,
-            u.luar_kasar ?? 0,
-            u.hadir,
-            u.telat,
-            u.telat_menit,
-            u.izin,
-            u.cuti,
-            u.sakit,
-            u.alpha,
-          ]),
+        const lengkap = await api.get(
+          `/admin/laporan?bulan=${encodeURIComponent(bulan)}&rinci=1`,
         );
-      } catch {
+        const baris = susunMatriksCSV({
+          laporan: lengkap,
+          admin: pengguna()?.nama ?? '',
+        });
+
+        unduhCSV(`rekap-absen-${bulan}.csv`, baris[0], baris.slice(1));
+      } catch (galat) {
         // Peramban bisa menolak mengunduh, dan itu bukan alasan menampilkan
         // layar galat. Yang perlu diketahui admin cuma bahwa berkasnya tidak
-        // jadi tersimpan.
+        // jadi tersimpan — termasuk kalau pengambilan rinciannya gagal.
         await beritahu({
           judul: 'Berkas tidak bisa diunduh',
-          pesan: 'Peramban menolak mengunduh berkasnya. Coba lagi atau periksa izin unduhan di peramban Anda.',
+          pesan:
+            galat.message ||
+            'Peramban menolak mengunduh berkasnya. Coba lagi atau periksa izin unduhan di peramban Anda.',
         });
+      } finally {
+        tombol.disabled = false;
+        tombol.textContent = teksAsli;
       }
     }
 

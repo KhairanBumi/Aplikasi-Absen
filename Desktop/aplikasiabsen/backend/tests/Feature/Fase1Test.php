@@ -225,7 +225,9 @@ class Fase1Test extends TestCase
             ])->assertStatus(409)
             ->assertJsonPath('kode', 'email_dipakai');
 
-        $this->withHeader('Authorization', 'Bearer '.$token)
+        // PIN boleh kembar: ia berfungsi seperti kata sandi, bukan identitas.
+        // Yang membedakan orang adalah NIP.
+        $kembar = $this->withHeader('Authorization', 'Bearer '.$token)
             ->postJson('/api/admin/magang', [
                 'nama' => 'PIN Kembar',
                 'nip' => 'MGG002',
@@ -234,8 +236,33 @@ class Fase1Test extends TestCase
                 'lokasi_id' => $this->lokasi->id,
                 'masuk_kerja' => '2026-01-05',
                 'pin' => '1357',
-            ])->assertStatus(409)
-            ->assertJsonPath('kode', 'pin_dipakai');
+            ]);
+
+        $kembar->assertCreated()
+            ->assertJsonPath('nip', 'MGG002');
+
+        $this->postJson('/api/masuk', [
+            'nip' => 'mgg002',
+            'pin' => '1357',
+        ])->assertOk()
+            ->assertJsonPath('pengguna.nip', 'MGG002');
+
+        $this->postJson('/api/masuk', [
+            'nip' => 'MGG001',
+            'pin' => '1357',
+        ])->assertOk()
+            ->assertJsonPath('pengguna.nip', 'MGG001');
+
+        // Ganti PIN ke angka yang sama dengan PIN admin juga harus diterima.
+        $this->withHeader('Authorization', 'Bearer '.$token)
+            ->putJson('/api/admin/magang/'.$kembar->json('id'), ['pin' => '2468'])
+            ->assertOk()
+            ->assertJsonPath('nip', 'MGG002');
+
+        $this->postJson('/api/masuk', [
+            'nip' => 'MGG002',
+            'pin' => '2468',
+        ])->assertOk();
 
         $this->withHeader('Authorization', 'Bearer '.$token)
             ->postJson('/api/admin/magang', [
@@ -271,6 +298,19 @@ class Fase1Test extends TestCase
         Carbon::setTestNow(Carbon::parse('2026-10-19 08:43:00', 'Asia/Jakarta'));
 
         $magang = $this->buatPengguna('MGG010', '1357');
+
+        $this->getJson('/api/kiosk/lokasi?perangkat='.$this->kiosk->id)
+            ->assertOk()
+            ->assertJsonPath('id', $this->lokasi->id)
+            ->assertJsonPath('nama', 'Kantor Pusat')
+            ->assertJsonPath('lintang', -6.2246)
+            ->assertJsonPath('bujur', 106.8094)
+            ->assertJsonPath('radius_m', 50)
+            ->assertJsonPath('kiosk_id', 'kiosk-kantor-pusat');
+
+        $this->getJson('/api/kiosk/lokasi?perangkat=kiosk-asing')
+            ->assertStatus(403)
+            ->assertJsonPath('kode', 'tidak_berhak');
 
         $this->postJson('/api/kiosk/absen', [
             'nip' => 'MGG010',
@@ -338,6 +378,9 @@ class Fase1Test extends TestCase
         Carbon::setTestNow(Carbon::parse('2026-10-19 09:00:00', 'Asia/Jakarta'));
 
         $this->buatPengguna('MGG020', '1357');
+        $this->buatPengguna('MGG021', '1357');
+        $this->buatPengguna('MGG022', '1357');
+        $this->buatPengguna('MGG023', '1357');
 
         $this->postJson('/api/kiosk/absen', [
             'nip' => 'MGG020',
@@ -350,18 +393,47 @@ class Fase1Test extends TestCase
 
         $this->assertDatabaseCount('absen', 0);
 
-        $this->postJson('/api/kiosk/absen', [
+        // Perangkat tanpa layanan lokasi tetap boleh absen di luar. Tidak ada
+        // koordinat yang dikarang; barisnya ditandai supaya admin memeriksa.
+        $tanpaLokasi = $this->postJson('/api/kiosk/absen', [
             'nip' => 'MGG020',
             'pin' => '1357',
             'kiosk_id' => $this->kiosk->id,
             'lokasi_id' => $this->lokasi->id,
             'mode' => 'luar',
             'foto' => $this->foto(),
-        ])->assertStatus(422)
-            ->assertJsonPath('kode', 'koordinat_tidak_lengkap');
+        ]);
 
-        $this->postJson('/api/kiosk/absen', [
-            'nip' => 'MGG020',
+        $tanpaLokasi->assertOk()
+            ->assertJsonPath('mode', 'luar')
+            ->assertJsonPath('akurasi', null)
+            ->assertJsonPath('jarak_m', null)
+            ->assertJsonPath('lokasi_teks', null)
+            ->assertJsonPath('lokasi_tersedia', false)
+            ->assertJsonPath('lokasi_meragukan', true);
+
+        // Koordinat separuh atau akurasi tanpa koordinat tetap ditolak: itu
+        // bukan "tidak ada lokasi", melainkan data yang tidak bisa dipakai.
+        foreach ([
+            ['lintang' => -6.9],
+            ['akurasi' => 20],
+        ] as $sebagian) {
+            $this->postJson('/api/kiosk/absen', [
+                'nip' => 'MGG023',
+                'pin' => '1357',
+                'kiosk_id' => $this->kiosk->id,
+                'lokasi_id' => $this->lokasi->id,
+                'mode' => 'luar',
+                'foto' => $this->foto(),
+                ...$sebagian,
+            ])->assertStatus(422)
+                ->assertJsonPath('kode', 'koordinat_tidak_lengkap');
+        }
+
+        // Akurasi kasar tidak lagi menolak absen; nilainya disimpan apa adanya
+        // dan barisnya ditandai meragukan.
+        $kasar = $this->postJson('/api/kiosk/absen', [
+            'nip' => 'MGG021',
             'pin' => '1357',
             'kiosk_id' => $this->kiosk->id,
             'lokasi_id' => $this->lokasi->id,
@@ -370,11 +442,19 @@ class Fase1Test extends TestCase
             'bujur' => 107.6,
             'akurasi' => 151,
             'foto' => $this->foto(),
-        ])->assertStatus(422)
-            ->assertJsonPath('kode', 'akurasi_terlalu_kasar');
+        ]);
+
+        $kasar->assertOk()
+            ->assertJsonPath('mode', 'luar')
+            ->assertJsonPath('akurasi', 151)
+            ->assertJsonPath('lokasi_tersedia', true)
+            ->assertJsonPath('lokasi_meragukan', true)
+            ->assertJsonPath('lokasi_teks', 'Jl. Uji 1, Gambir, Jakarta Pusat');
+
+        $this->assertGreaterThan(50_000, $kasar->json('jarak_m'));
 
         $jauh = $this->postJson('/api/kiosk/absen', [
-            'nip' => 'MGG020',
+            'nip' => 'MGG022',
             'pin' => '1357',
             'kiosk_id' => $this->kiosk->id,
             'lokasi_id' => $this->lokasi->id,
@@ -388,6 +468,7 @@ class Fase1Test extends TestCase
         $jauh->assertOk()
             ->assertJsonPath('mode', 'luar')
             ->assertJsonPath('akurasi', 150)
+            ->assertJsonPath('lokasi_tersedia', true)
             ->assertJsonPath('lokasi_meragukan', true)
             ->assertJsonPath('lokasi_teks', 'Jl. Uji 1, Gambir, Jakarta Pusat');
 

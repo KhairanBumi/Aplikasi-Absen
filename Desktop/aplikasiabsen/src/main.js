@@ -2,6 +2,7 @@ import './style.css';
 import { pengguna, segarkanSesi } from './api.js';
 import { pasangLatar } from './latar.js';
 import { semuaButir } from './menu.js';
+import { animasiHalaman } from './animasi.js';
 
 // Latar Feral dipasang lebih dulu supaya kaca di layar pertama sudah punya
 // sesuatu untuk dibiaskan sejak frame pertama.
@@ -21,6 +22,8 @@ const MUAT = {
   '#/lokasi': () => import('./views/lokasi.js'),
   '#/shift': () => import('./views/shift.js'),
   '#/hari-libur': () => import('./views/hari-libur.js'),
+  '#/audit': () => import('./views/audit.js'),
+  '#/anomali': () => import('./views/anomali.js'),
 };
 
 // Rute dan hak akses diturunkan dari daftar menu — satu sumber saja, supaya
@@ -38,6 +41,7 @@ for (const b of semuaButir()) {
 const AKAR = document.getElementById('akar');
 let bersihkan = null;
 let urutan = 0;
+let pertama = true;
 
 /**
  * Halaman pertama setelah masuk.
@@ -94,6 +98,12 @@ async function buka() {
   document.title = view.judul ? `${view.judul} — Aplikasi Absen` : 'Aplikasi Absen';
   AKAR.replaceChildren();
   bersihkan = view.mount(AKAR) ?? null;
+  // Muat pertama tidak memindahkan fokus: Tab pertama harus sampai ke tautan
+  // "Lewati ke isi utama". Setelah pindah menu, fokus pindah ke isi supaya
+  // pembaca layar mengumumkan halaman baru, bukan tetap di menu yang ditekan.
+  if (!pertama) AKAR.querySelector('#isi-utama')?.focus({ preventScroll: true });
+  pertama = false;
+  animasiHalaman(AKAR);
 }
 
 addEventListener('hashchange', buka);

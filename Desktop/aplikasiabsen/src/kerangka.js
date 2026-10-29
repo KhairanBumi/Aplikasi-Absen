@@ -80,6 +80,13 @@ export function pasangKerangka(akar, { judul, aksi = '' }) {
   akar.innerHTML = `
     <div class="min-h-dvh lg:pl-[17rem]">
 
+      <a href="#isi-utama" data-lewati
+         class="sr-only focus:not-sr-only focus:fixed focus:top-4 focus:left-4 focus:z-50
+                focus:rounded-full focus:bg-white focus:px-4 focus:py-2 focus:text-sm
+                focus:font-medium focus:text-ink focus:shadow-naik">
+        Lewati ke isi utama
+      </a>
+
       <!-- Kabut di tepi atas: tanpa ini, teks yang digulir naik akan terlihat
            lewat celah 1rem di atas bilah dan tampak berantakan. -->
       <div class="pointer-events-none fixed top-0 right-0 left-0 z-10 h-24 backdrop-blur-md
@@ -133,11 +140,19 @@ export function pasangKerangka(akar, { judul, aksi = '' }) {
           </nav>
         </header>
 
-        <main class="flex-1 px-4 py-6 sm:px-6">
+        <main id="isi-utama" tabindex="-1" class="flex-1 px-4 py-6 outline-none sm:px-6">
           <div data-isi class="mx-auto max-w-6xl"></div>
         </main>
       </div>
     </div>`;
+
+  const lewati = akar.querySelector('[data-lewati]');
+  lewati?.addEventListener('click', (e) => {
+    // Jangan biarkan hash berubah: router menganggap `#isi-utama` rute tak
+    // dikenal dan akan memasang ulang halaman, bukan melompat ke isinya.
+    e.preventDefault();
+    akar.querySelector('#isi-utama')?.focus();
+  });
 
   const tombol = akar.querySelector('[data-keluar]');
   tombol.addEventListener('click', async () => {

@@ -9,6 +9,16 @@ const PANGKAL = import.meta.env.VITE_API_BASE ?? '/api';
 const KUNCI = 'absen-sesi';
 const KUNCI_PERANGKAT = 'absen-kiosk-perangkat';
 
+// Identitas kiosk yang dipasang oleh PIC infrastruktur lewat build/deploy.
+// Backend hanya menerima perangkat yang sudah terdaftar, jadi menebak-nebak
+// UUID acak di browser tidak akan pernah bisa absen. Nilainya bukan rahasia;
+// yang penting adalah ID ini ada di tabel `perangkat_kiosk` server.
+const PERANGKAT_TETAP = String(import.meta.env.VITE_KIOSK_ID ?? '').trim();
+
+// Batas tunggu satu permintaan. Tanpa ini, server yang tidak menjawab membuat
+// layar kiosk menggantung tanpa kabar sampai browser menyerah sendiri.
+const BATAS_PERMINTAAN_MS = 30_000;
+
 let sesi = bacaSesi();
 let modulTiruan = null;
 
@@ -20,11 +30,27 @@ async function tiruan() {
 /**
  * Identitas perangkat kiosk.
  *
- * Dipakai sebagai dasar device enrollment: server boleh menolak kiosk yang
- * belum terdaftar atau yang lokasinya tidak cocok. Nilainya sengaja tidak
- * rahasia — token pendaftaran yang sebenarnya tetap harus divalidasi server.
+ * Server menolak `kiosk_id` yang tidak ada di tabel `perangkat_kiosk`, dan itu
+ * disengaja: identitas acak dari browser tidak boleh dianggap kiosk sah.
+ * Karena itu urutan pemilihannya:
+ *
+ * 1. `VITE_KIOSK_ID` — diisi saat pemasangan kiosk, yang juga mendaftarkan ID
+ *    itu di backend. Ini yang menimpa UUID acak sisa percobaan sebelumnya.
+ * 2. localStorage — identitas yang sudah terpasang di PC ini.
+ * 3. UUID acak — hanya untuk pengembangan/mode tiruan; backend asli akan
+ *    menolaknya dengan pesan yang jelas, bukan diam-diam menerima.
  */
 export function idPerangkat() {
+  if (PERANGKAT_TETAP) {
+    try {
+      localStorage.setItem(KUNCI_PERANGKAT, PERANGKAT_TETAP);
+    } catch {
+      // Penyimpanan diblokir bukan alasan mengganti identitas yang sudah
+      // ditetapkan saat pemasangan.
+    }
+    return PERANGKAT_TETAP;
+  }
+
   try {
     let id = localStorage.getItem(KUNCI_PERANGKAT);
     if (!id) {
@@ -74,6 +100,9 @@ async function minta(metode, jalur, data) {
   }
 
   let res;
+  const pengawas = new AbortController();
+  const timer = setTimeout(() => pengawas.abort(), BATAS_PERMINTAAN_MS);
+
   try {
     res = await fetch(PANGKAL + jalur, {
       method: metode,
@@ -83,12 +112,27 @@ async function minta(metode, jalur, data) {
         ...(sesi?.token ? { Authorization: `Bearer ${sesi.token}` } : {}),
       },
       body: data ? JSON.stringify(data) : undefined,
+      signal: pengawas.signal,
     });
-  } catch {
-    // fetch hanya melempar di tingkat jaringan: server mati, kabel putus, atau
-    // diblokir CORS. Pesan aslinya "Failed to fetch" — tidak berarti apa pun
-    // bagi magang yang sedang berdiri di depan kiosk jam tujuh pagi.
-    throw new Error('Tidak bisa menghubungi server. Periksa jaringan kantor, lalu coba lagi.');
+  } catch (galat) {
+    // fetch hanya melempar di tingkat jaringan: server mati, kabel putus,
+    // diblokir CORS, atau batas waktu di atas habis. Pesan aslinya
+    // "Failed to fetch" — tidak berarti apa pun bagi magang yang sedang
+    // berdiri di depan kiosk jam tujuh pagi.
+    //
+    // `jaringan` dipakai pemanggil untuk memutuskan apakah aman mengulang.
+    // Galat HTTP tidak pernah sampai ke sini; galat itu dilempar di bawah
+    // setelah server benar-benar menjawab.
+    const putus =
+      galat.name === 'AbortError'
+        ? 'Server tidak menjawab dalam 30 detik. Periksa jaringan kantor, lalu coba lagi.'
+        : 'Tidak bisa menghubungi server. Periksa jaringan kantor, lalu coba lagi.';
+
+    const kesalahan = new Error(putus);
+    kesalahan.jaringan = true;
+    throw kesalahan;
+  } finally {
+    clearTimeout(timer);
   }
 
   // Backend bisa mengirim halaman HTML saat error, jadi parse-nya jangan diasumsikan JSON.

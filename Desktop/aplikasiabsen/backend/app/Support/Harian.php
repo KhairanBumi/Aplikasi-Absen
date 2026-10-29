@@ -4,6 +4,7 @@ namespace App\Support;
 
 use App\Models\Absen;
 use App\Models\HariLibur;
+use App\Models\Izin;
 use App\Models\Pengguna;
 use Illuminate\Support\Carbon;
 
@@ -34,6 +35,20 @@ class Harian
             ->get()
             ->keyBy(fn (HariLibur $h) => $h->tanggal->format('Y-m-d'));
 
+        $izinHari = [];
+
+        Izin::where('pengguna_id', $pengguna->id)
+            ->where('status', 'disetujui')
+            ->whereIn('jenis', Izin::JENIS)
+            ->whereDate('mulai', '<=', $akhir->toDateString())
+            ->whereDate('selesai', '>=', $awal->toDateString())
+            ->get()
+            ->each(function (Izin $izin) use (&$izinHari) {
+                for ($tanggal = $izin->mulai->copy(); $tanggal->lte($izin->selesai); $tanggal->addDay()) {
+                    $izinHari[$tanggal->format('Y-m-d')] = $izin;
+                }
+            });
+
         $mulai = $pengguna->masuk_kerja && $pengguna->masuk_kerja->greaterThan($awal)
             ? $pengguna->masuk_kerja->copy()->startOfDay()
             : $awal;
@@ -53,7 +68,10 @@ class Harian
             $utama = $masuk ?? $pulang;
             $hariLibur = $libur->get($kunci);
 
-            // shortcut: tabel izin belum ada, jadi izin/cuti/sakit tidak bisa jadi status; buat saat modul izin Fase 2 dikerjakan.
+            $izinHariIni = $izinHari[$kunci] ?? null;
+            $keteranganIzin = null;
+            $alasanIzin = null;
+
             if ($hariLibur || $hari->isWeekend()) {
                 $status = 'libur';
                 $keteranganLibur = $hariLibur?->keterangan
@@ -64,6 +82,11 @@ class Harian
             } elseif ($hari->lt($mulai)) {
                 $status = 'libur';
                 $keteranganLibur = 'Belum masuk kerja';
+            } elseif ($izinHariIni) {
+                $status = $izinHariIni->jenis;
+                $keteranganLibur = null;
+                $keteranganIzin = $izinHariIni->jenis;
+                $alasanIzin = $izinHariIni->alasan;
             } elseif ($hari->lt($hariIni)) {
                 $status = 'alpha';
                 $keteranganLibur = null;
@@ -82,8 +105,8 @@ class Harian
                 'pulang' => $pulang?->waktu?->toIso8601String(),
                 'telat_menit' => (int) ($masuk?->telat_menit ?? 0),
                 'status' => $status,
-                'keterangan_izin' => null,
-                'alasan_izin' => null,
+                'keterangan_izin' => $keteranganIzin,
+                'alasan_izin' => $alasanIzin,
                 'lokasi' => $utama ? ($mode === 'luar' ? 'Dinas luar' : $lokasi) : null,
                 'lokasi_kantor' => $utama ? $lokasi : null,
                 'foto' => $utama?->fotoUrl(),
@@ -129,23 +152,34 @@ class Harian
     /** Jumlah hari kerja antara dua tanggal, tanpa Sabtu, Minggu, dan hari libur. */
     public static function hitungHariKerja(Carbon $dari, Carbon $sampai): int
     {
+        return count(self::tanggalHariKerja($dari, $sampai));
+    }
+
+    public static function tanggalHariKerja(Carbon $dari, Carbon $sampai): array
+    {
+        $dari = $dari->copy()->startOfDay();
+        $sampai = $sampai->copy()->startOfDay();
+
         if ($sampai->lt($dari)) {
-            return 0;
+            return [];
         }
 
-        $libur = HariLibur::whereBetween('tanggal', [$dari->toDateString(), $sampai->toDateString()])
-            ->get()
+        $libur = HariLibur::whereDate('tanggal', '>=', $dari->toDateString())
+            ->whereDate('tanggal', '<=', $sampai->toDateString())
+            ->get(['tanggal'])
             ->map(fn (HariLibur $h) => $h->tanggal->format('Y-m-d'))
             ->flip();
 
-        $jumlah = 0;
+        $hasil = [];
 
         for ($hari = $dari->copy(); $hari->lte($sampai); $hari->addDay()) {
-            if (! $hari->isWeekend() && ! $libur->has($hari->format('Y-m-d'))) {
-                $jumlah++;
+            $kunci = $hari->format('Y-m-d');
+
+            if (! $hari->isWeekend() && ! $libur->has($kunci)) {
+                $hasil[] = $kunci;
             }
         }
 
-        return $jumlah;
+        return $hasil;
     }
 }

@@ -109,6 +109,7 @@ export default {
 
       gambarRingkasan(d.ringkasan, d.hari_kerja ?? kerja);
       kotakDaftar.innerHTML = tabel({
+        judul: 'Riwayat absen',
         kolom,
         baris: d.data,
         kosong: `Belum ada catatan absen pada ${labelBulan(bulan)}.`,

@@ -35,7 +35,7 @@ export default {
 
   mount(akar) {
     akar.innerHTML = `
-      <main class="flex min-h-dvh flex-col items-center justify-center px-5 py-8">
+      <main id="isi-utama" tabindex="-1" class="flex min-h-dvh flex-col items-center justify-center px-5 py-8 outline-none">
         <div class="w-full max-w-[26rem]">
 
           <div class="mb-6 text-center">
