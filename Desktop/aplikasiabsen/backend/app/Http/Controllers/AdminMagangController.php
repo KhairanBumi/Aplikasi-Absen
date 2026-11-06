@@ -2,10 +2,16 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\Absen;
 use App\Models\Audit;
+use App\Models\Izin;
 use App\Models\Pengguna;
+use App\Models\PercobaanMasuk;
+use App\Models\Sesi;
+use App\Support\Foto;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Validation\Rule;
 
@@ -46,14 +52,6 @@ class AdminMagangController extends Controller
 
         if ($bentrok = $this->bentrok($data['nip'], $data['email'] ?? null)) {
             return $bentrok;
-        }
-
-        if ($this->pinDipakai((string) $data['pin'])) {
-            return $this->galat(
-                'PIN sudah dipakai pengguna lain. Pilih PIN lain.',
-                409,
-                'pin_dipakai'
-            );
         }
 
         $pengguna = Pengguna::create([
@@ -125,14 +123,9 @@ class AdminMagangController extends Controller
         $pinDiubah = false;
 
         if ($pinBaru !== null && $pinBaru !== '') {
-            if ($this->pinDipakai((string) $pinBaru, $pengguna->id)) {
-                return $this->galat(
-                    'PIN sudah dipakai pengguna lain. Pilih PIN lain.',
-                    409,
-                    'pin_dipakai'
-                );
-            }
-
+            // PIN tidak harus unik. Ia berfungsi seperti kata sandi, dan
+            // memaksa semua magang memilih angka yang belum dipakai orang lain
+            // justru membuat PIN mudah ditebak. Identitas tetap dijaga NIP.
             $data['pin_hash'] = Hash::make((string) $pinBaru);
             $pinDiubah = true;
         }
@@ -161,6 +154,63 @@ class AdminMagangController extends Controller
         );
 
         return response()->json($pengguna->adminArray());
+    }
+
+    /**
+     * Hapus akun beserta seluruh jejak kehadirannya.
+     *
+     * Absen dan izin memakai foreign key restrict, jadi keduanya harus dibuang
+     * lebih dulu. Jejak audit tidak ikut dihapus: baris yang dibuat orang ini
+     * dilepas pemiliknya (menjadi "Sistem"), sedangkan tindakan admin yang
+     * menghapusnya tetap tercatat lengkap dengan NIP dan nama salinan.
+     */
+    public function destroy(Request $request, int $id): JsonResponse
+    {
+        $pengguna = Pengguna::findOrFail($id);
+        $aktor = $request->attributes->get('pengguna');
+
+        if ($pengguna->id === $aktor->id) {
+            return $this->galat('Anda tidak bisa menghapus akun sendiri.', 422);
+        }
+
+        $foto = $pengguna->foto_path ? [$pengguna->foto_path] : [];
+        foreach (
+            Absen::where('pengguna_id', $pengguna->id)
+                ->whereNotNull('foto_path')
+                ->pluck('foto_path') as $path
+        ) {
+            $foto[] = $path;
+        }
+
+        $identitas = [
+            'pengguna_id' => $pengguna->id,
+            'nip' => $pengguna->nip,
+            'nama' => $pengguna->nama,
+        ];
+
+        DB::transaction(function () use ($pengguna) {
+            Absen::where('pengguna_id', $pengguna->id)->delete();
+            Izin::where('pengguna_id', $pengguna->id)->delete();
+            Sesi::where('pengguna_id', $pengguna->id)->delete();
+
+            // Referensi yang boleh tetap ada, tetapi tidak boleh menunjuk ke
+            // akun yang sudah tidak ada.
+            Audit::where('pengguna_id', $pengguna->id)->update(['pengguna_id' => null]);
+            PercobaanMasuk::where('pengguna_id', $pengguna->id)->update(['pengguna_id' => null]);
+            Izin::where('diputuskan_oleh', $pengguna->id)->update(['diputuskan_oleh' => null]);
+
+            $pengguna->delete();
+        });
+
+        // File baru dibuang setelah transaksi berhasil. Kalau penghapusan DB
+        // gagal, fotonya masih utuh dan tidak ada yang menggantung.
+        foreach ($foto as $path) {
+            Foto::hapus($path);
+        }
+
+        Audit::catat($aktor->id, 'hapus_magang', $identitas, $request);
+
+        return response()->json(['ok' => true]);
     }
 
     private function normalisasi(Request $request): void
@@ -239,23 +289,6 @@ class AdminMagangController extends Controller
         }
 
         return null;
-    }
-
-    private function pinDipakai(string $pin, ?int $kecuali = null): bool
-    {
-        $query = Pengguna::query()->select(['id', 'pin_hash']);
-
-        if ($kecuali) {
-            $query->where('id', '!=', $kecuali);
-        }
-
-        foreach ($query->cursor() as $lain) {
-            if ($lain->pin_hash && Hash::check($pin, $lain->pin_hash)) {
-                return true;
-            }
-        }
-
-        return false;
     }
 
     private function pesan(): array

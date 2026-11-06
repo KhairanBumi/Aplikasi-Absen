@@ -1,22 +1,570 @@
 <!doctype html>
-<html lang="id">
+<html lang="id" class="pemuat-aktif">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta name="theme-color" content="#5856d6" />
-    <meta name="description" content="Aplikasi absensi anak magang — kiosk, dashboard admin, dan rekap kehadiran." />
+    <meta name="description" content="Aplikasi absensi anak magang BPJS Ketenagakerjaan — kiosk, dashboard admin, dan rekap kehadiran." />
     <title>Aplikasi Absen</title>
+    <link rel="icon" type="image/png" sizes="128x128" href="/bpjs-mark.png" />
+    <link rel="apple-touch-icon" sizes="180x180" href="/bpjs-touch.png" />
+    <link rel="preload" href="/bpjs-mark.png" as="image" type="image/png" />
+    <link rel="preload" href="/pemuat/daun.png" as="image" type="image/png" />
+    <link rel="preload" href="/pemuat/kuning.png" as="image" type="image/png" />
+    <link rel="preload" href="/pemuat/biru.png" as="image" type="image/png" />
+    <link rel="preload" href="/pemuat/kata.png" as="image" type="image/png" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <!-- Inter hanya dipakai kalau SF Pro tidak ada. Di macOS, -apple-system di
-         style.css menang duluan dan yang tampil huruf asli Apple. -->
-    <link
-      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap"
-      rel="stylesheet"
-    />
+    <!-- Inter dimuat dari main.js, bukan stylesheet di sini: berkas lintas-origin
+         yang memblokir render membuat splash tidak sempat tampil di koneksi
+         lambat. Font sistem dipakai sampai Inter selesai diunduh. -->
+    <style>
+      :root {
+        --pemuat-ease: cubic-bezier(0.22, 1, 0.36, 1);
+        --pemuat-ease-lembut: cubic-bezier(0.4, 0, 0.2, 1);
+        --pemuat-latar:
+          radial-gradient(62% 54% at 17% 8%, rgb(104 190 141 / 0.38), transparent 74%),
+          radial-gradient(58% 62% at 88% 12%, rgb(0 136 153 / 0.24), transparent 76%),
+          radial-gradient(58% 52% at 82% 90%, rgb(248 229 140 / 0.5), transparent 76%),
+          radial-gradient(48% 46% at 24% 88%, rgb(0 136 153 / 0.1), transparent 72%);
+      }
+
+      html {
+        background-color: #ebf6f7;
+      }
+
+      html.pemuat-aktif,
+      html.pemuat-aktif body {
+        overflow: hidden;
+      }
+
+      body {
+        min-height: 100dvh;
+        margin: 0;
+        background-color: #ebf6f7;
+      }
+
+      #pemuat-awal {
+        --pemuat-ukuran: 6rem;
+        --pemuat-kata-tinggi: 3rem;
+        --pemuat-kata-lebar: 11.1rem;
+        --pemuat-tinta: #4f6062;
+        position: fixed;
+        inset: 0;
+        z-index: 9999;
+        display: grid;
+        place-items: center;
+        overflow: hidden;
+        padding: 2rem;
+        background-color: #ebf6f7;
+        background-image: var(--pemuat-latar);
+        color: var(--pemuat-tinta);
+        font-family:
+          -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Inter', 'Segoe UI', Roboto,
+          'Helvetica Neue', Arial, sans-serif;
+        opacity: 1;
+        transition: opacity 250ms var(--pemuat-ease);
+      }
+
+      #pemuat-awal.pemuat-selesai {
+        opacity: 0;
+        pointer-events: none;
+      }
+
+      .pemuat-isi {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 1.25rem;
+        text-align: center;
+        transform: translateY(-2vh);
+      }
+
+      .pemuat-identitas {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+      }
+
+      .pemuat-lockup {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+      }
+
+      .pemuat-merk {
+        display: flex;
+        flex: none;
+        justify-content: center;
+      }
+
+      /* Slot wordmark tumbuh ke samping. Karena lockup ditengahkan, mark
+         terdorong ke kiri saat wordmark masuk dari kanan. */
+      .pemuat-slot-kata {
+        display: flex;
+        flex: none;
+        align-items: center;
+        max-width: 0;
+        overflow: hidden;
+        animation: pemuat-slot-kata 500ms var(--pemuat-ease-lembut) 1000ms forwards;
+      }
+
+      .pemuat-kata {
+        display: block;
+        flex: none;
+        width: auto;
+        height: var(--pemuat-kata-tinggi);
+        margin-left: 0.6rem;
+        opacity: 0;
+        transform: translateX(20px);
+        user-select: none;
+        -webkit-user-drag: none;
+        animation: pemuat-kata-muncul 500ms var(--pemuat-ease-lembut) 1000ms forwards;
+      }
+
+      .pemuat-slot-cabang {
+        display: flex;
+        justify-content: center;
+        max-height: 0;
+        overflow: hidden;
+        animation: pemuat-slot-cabang 450ms var(--pemuat-ease-lembut) 1550ms forwards;
+      }
+
+      .pemuat-cabang {
+        display: block;
+        margin-top: 0.35rem;
+        color: #4d5156;
+        font-size: 0.8125rem;
+        font-weight: 700;
+        line-height: 1.2;
+        letter-spacing: 0.16em;
+        opacity: 0;
+        transform: translateY(8px);
+        animation: pemuat-cabang-muncul 450ms var(--pemuat-ease-lembut) 1550ms forwards;
+      }
+
+      .pemuat-panggung {
+        position: relative;
+        width: var(--pemuat-ukuran);
+        height: var(--pemuat-ukuran);
+        transition: transform 250ms var(--pemuat-ease);
+      }
+
+      #pemuat-awal.pemuat-selesai .pemuat-panggung {
+        transform: scale(1.03);
+      }
+
+      .pemuat-panggung::before {
+        content: '';
+        position: absolute;
+        inset: -38%;
+        border-radius: 50%;
+        background: radial-gradient(
+          circle,
+          rgb(255 255 255 / 0.9) 0%,
+          rgb(255 255 255 / 0.48) 40%,
+          transparent 70%
+        );
+        opacity: 0;
+        pointer-events: none;
+        animation: pemuat-halo 700ms ease 380ms forwards;
+      }
+
+      .pemuat-lambang {
+        position: absolute;
+        inset: 0;
+        animation: pemuat-mengambang 3.2s ease-in-out 2000ms infinite;
+      }
+
+      .pemuat-bagian,
+      .pemuat-lengkap {
+        position: absolute;
+        inset: 0;
+        display: block;
+        width: 100%;
+        height: 100%;
+      }
+
+      .pemuat-bagian {
+        opacity: 0;
+        will-change: transform, opacity;
+      }
+
+      .pemuat-bagian img,
+      .pemuat-lengkap {
+        display: block;
+        width: 100%;
+        height: 100%;
+        object-fit: contain;
+        user-select: none;
+        -webkit-user-drag: none;
+      }
+
+      .pemuat-bagian img {
+        animation: pemuat-pudar 260ms linear 700ms forwards;
+      }
+
+      .pemuat-bagian--daun {
+        animation: pemuat-dari-kiri 560ms var(--pemuat-ease) 20ms both;
+      }
+
+      .pemuat-bagian--kuning {
+        animation: pemuat-dari-kanan 560ms var(--pemuat-ease) 80ms both;
+      }
+
+      .pemuat-bagian--biru {
+        animation: pemuat-dari-kanan 560ms var(--pemuat-ease) 140ms both;
+      }
+
+      .pemuat-lengkap {
+        opacity: 0;
+        animation: pemuat-lengkap-muncul 260ms var(--pemuat-ease) 700ms forwards;
+      }
+
+      .pemuat-teks {
+        margin: 0;
+        font-size: 0.875rem;
+        font-weight: 500;
+        line-height: 1.5;
+        letter-spacing: 0.01em;
+      }
+
+      .pemuat-jalur {
+        position: relative;
+        width: 9rem;
+        height: 3px;
+        overflow: hidden;
+        border-radius: 9999px;
+        background: linear-gradient(
+          90deg,
+          rgb(58 179 74 / 0.42),
+          rgb(216 217 43 / 0.56) 50%,
+          rgb(11 120 187 / 0.42)
+        );
+        opacity: 0;
+        animation: pemuat-muncul 300ms ease 700ms forwards;
+      }
+
+      .pemuat-jalur-kilau {
+        position: absolute;
+        inset-block: 0;
+        left: 0;
+        width: 45%;
+        border-radius: inherit;
+        background: linear-gradient(90deg, transparent, rgb(255 255 255 / 0.95), transparent);
+        transform: translateX(-130%);
+        animation: pemuat-kilau 2s var(--pemuat-ease) 2000ms infinite;
+      }
+
+      .pemuat-lambat {
+        margin: -0.35rem 0 0;
+        font-size: 0.75rem;
+        line-height: 1.4;
+        color: #5f6e70;
+        animation: pemuat-muncul 240ms ease;
+      }
+
+      .pemuat-galat {
+        display: none;
+        flex-direction: column;
+        align-items: center;
+        gap: 0.6rem;
+        max-width: 21rem;
+      }
+
+      .pemuat-galat p {
+        margin: 0;
+      }
+
+      .pemuat-galat-teks {
+        color: #1d1d1f;
+        font-size: 1rem;
+        font-weight: 600;
+      }
+
+      .pemuat-galat-petunjuk {
+        font-size: 0.875rem;
+        line-height: 1.5;
+      }
+
+      .pemuat-ulang {
+        min-height: 44px;
+        margin-top: 0.35rem;
+        padding: 0.65rem 1.35rem;
+        border: 0;
+        border-radius: 9999px;
+        background: #1d1d1f;
+        color: #fff;
+        font: inherit;
+        font-size: 0.875rem;
+        font-weight: 600;
+        cursor: pointer;
+      }
+
+      .pemuat-ulang:hover {
+        background: #333336;
+      }
+
+      .pemuat-ulang:focus-visible {
+        outline: 2px solid #0b78bb;
+        outline-offset: 3px;
+      }
+
+      #pemuat-awal.pemuat-gagal .pemuat-galat {
+        display: flex;
+      }
+
+      #pemuat-awal.pemuat-gagal .pemuat-identitas,
+      #pemuat-awal.pemuat-gagal .pemuat-teks,
+      #pemuat-awal.pemuat-gagal .pemuat-jalur,
+      #pemuat-awal.pemuat-gagal .pemuat-lambat {
+        display: none;
+      }
+
+      .pemuat-noscript {
+        position: fixed;
+        inset: 0;
+        z-index: 1;
+        display: grid;
+        place-items: center;
+        padding: 2rem;
+        background-color: #ebf6f7;
+        background-image: var(--pemuat-latar);
+        color: #1d1d1f;
+        font-family:
+          -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Inter', 'Segoe UI', Roboto,
+          'Helvetica Neue', Arial, sans-serif;
+      }
+
+      .pemuat-noscript p {
+        max-width: 28rem;
+        margin: 0;
+        font-size: 1rem;
+        line-height: 1.6;
+        text-align: center;
+      }
+
+      @keyframes pemuat-dari-kiri {
+        from {
+          opacity: 0;
+          transform: translate3d(-20px, 0, 0) scale(0.97);
+        }
+        to {
+          opacity: 1;
+          transform: none;
+        }
+      }
+
+      @keyframes pemuat-dari-kanan {
+        from {
+          opacity: 0;
+          transform: translate3d(20px, 0, 0) scale(0.97);
+        }
+        to {
+          opacity: 1;
+          transform: none;
+        }
+      }
+
+      @keyframes pemuat-pudar {
+        to {
+          opacity: 0;
+        }
+      }
+
+      @keyframes pemuat-lengkap-muncul {
+        to {
+          opacity: 1;
+        }
+      }
+
+      @keyframes pemuat-halo {
+        to {
+          opacity: 1;
+        }
+      }
+
+      @keyframes pemuat-muncul {
+        to {
+          opacity: 1;
+        }
+      }
+
+      @keyframes pemuat-mengambang {
+        0%,
+        100% {
+          transform: translateY(0);
+        }
+        50% {
+          transform: translateY(-3px);
+        }
+      }
+
+      @keyframes pemuat-slot-kata {
+        to {
+          max-width: calc(var(--pemuat-kata-lebar) + 0.6rem);
+        }
+      }
+
+      @keyframes pemuat-kata-muncul {
+        from {
+          opacity: 0;
+          transform: translateX(20px);
+        }
+        to {
+          opacity: 1;
+          transform: none;
+        }
+      }
+
+      @keyframes pemuat-slot-cabang {
+        to {
+          max-height: 1.4rem;
+        }
+      }
+
+      @keyframes pemuat-cabang-muncul {
+        from {
+          opacity: 0;
+          transform: translateY(8px);
+        }
+        to {
+          opacity: 1;
+          transform: none;
+        }
+      }
+
+      @keyframes pemuat-kilau {
+        0% {
+          transform: translateX(-130%);
+        }
+        55%,
+        100% {
+          transform: translateX(250%);
+        }
+      }
+
+      @media (min-width: 640px) {
+        #pemuat-awal {
+          --pemuat-ukuran: 7rem;
+          --pemuat-kata-tinggi: 3.75rem;
+          --pemuat-kata-lebar: 13.8rem;
+        }
+      }
+
+      @media (prefers-reduced-motion: reduce) {
+        #pemuat-awal,
+        .pemuat-panggung {
+          transition: none;
+        }
+
+        .pemuat-bagian {
+          display: none;
+        }
+
+        .pemuat-lengkap {
+          opacity: 1;
+          animation: none;
+        }
+
+        .pemuat-lambang {
+          animation: none;
+        }
+
+        .pemuat-slot-kata {
+          max-width: calc(var(--pemuat-kata-lebar) + 0.6rem);
+          overflow: visible;
+          animation: none;
+        }
+
+        .pemuat-slot-cabang {
+          max-height: 1.4rem;
+          overflow: visible;
+          animation: none;
+        }
+
+        .pemuat-kata,
+        .pemuat-cabang {
+          opacity: 1;
+          transform: none;
+          animation: none;
+        }
+
+        .pemuat-panggung::before,
+        .pemuat-jalur,
+        .pemuat-lambat {
+          opacity: 1;
+          animation: none;
+        }
+
+        .pemuat-jalur-kilau {
+          display: none;
+        }
+      }
+
+      [hidden] {
+        display: none !important;
+      }
+    </style>
     <script type="module" src="/src/main.js"></script>
   </head>
   <body class="min-h-dvh">
+    <div id="pemuat-awal">
+      <div class="pemuat-isi">
+        <div class="pemuat-identitas">
+          <div class="pemuat-lockup">
+            <div class="pemuat-merk">
+              <div class="pemuat-panggung">
+                <div class="pemuat-lambang" aria-hidden="true">
+                  <span class="pemuat-bagian pemuat-bagian--daun">
+                    <img src="/pemuat/daun.png" alt="" width="128" height="128" />
+                  </span>
+                  <span class="pemuat-bagian pemuat-bagian--kuning">
+                    <img src="/pemuat/kuning.png" alt="" width="128" height="128" />
+                  </span>
+                  <span class="pemuat-bagian pemuat-bagian--biru">
+                    <img src="/pemuat/biru.png" alt="" width="128" height="128" />
+                  </span>
+                  <img
+                    class="pemuat-lengkap"
+                    src="/bpjs-mark.png"
+                    alt=""
+                    width="128"
+                    height="128"
+                  />
+                </div>
+              </div>
+            </div>
+            <div class="pemuat-slot-kata">
+              <img class="pemuat-kata" src="/pemuat/kata.png" alt="" width="202" height="55" />
+            </div>
+          </div>
+          <div class="pemuat-slot-cabang">
+            <span class="pemuat-cabang">Karimunjawa</span>
+          </div>
+        </div>
+        <p class="pemuat-teks" role="status">Menyiapkan aplikasi…</p>
+        <div class="pemuat-jalur" aria-hidden="true">
+          <span class="pemuat-jalur-kilau"></span>
+        </div>
+        <p class="pemuat-lambat" aria-live="polite" hidden>
+          Koneksi terasa lambat, mohon tunggu sebentar…
+        </p>
+        <div class="pemuat-galat" role="alert" hidden>
+          <p class="pemuat-galat-teks">Aplikasi gagal dimuat.</p>
+          <p class="pemuat-galat-petunjuk">Periksa koneksi Anda, lalu coba lagi.</p>
+          <button type="button" class="pemuat-ulang" data-pemuat-ulang>Muat ulang</button>
+        </div>
+      </div>
+      <noscript>
+        <div class="pemuat-noscript">
+          <p>
+            <strong>JavaScript diperlukan.</strong><br />
+            Aktifkan JavaScript di peramban Anda, lalu muat ulang halaman ini.
+          </p>
+        </div>
+      </noscript>
+    </div>
     <div id="akar"></div>
   </body>
 </html>

@@ -260,9 +260,8 @@ async function adminSaja(token) {
 const idBaru = (koleksi) => koleksi.reduce((n, x) => Math.max(n, x.id), 0) + 1;
 
 /**
- * Jejak tindakan admin. Tidak ditampilkan di layar mana pun (belum ada layar
- * audit), tetapi disimpan supaya perubahan PIN, keputusan cuti, dan perubahan
- * data master bisa ditelusuri. Jangan pernah menulis PIN ke sini.
+ * Jejak tindakan admin, dibaca layar Log Audit. Jangan pernah menulis PIN ke
+ * sini.
  */
 function catatAudit(aku, aksi, rincian = {}) {
   toko.audit.push({
@@ -507,7 +506,7 @@ function riwayatBulan(penggunaId, bulan) {
  * bulan berjalan, kalau tidak, kehadirannya selama sepuluh hari hilang dari
  * rekap dan angka gaji ikut salah.
  */
-function rekapBulan(bulan) {
+function rekapBulan(bulan, rinci = false) {
   const adaCatatan = new Set(
     toko.absen.filter((a) => a.tanggal.slice(0, 7) === bulan).map((a) => a.pengguna_id),
   );
@@ -540,6 +539,8 @@ function rekapBulan(bulan) {
       divisi: orang.divisi,
       nik: orang.nik,
       shift: toko.shift.find((s) => s.id === orang.shift_id)?.nama ?? '—',
+      lokasi: namaLokasi(orang.lokasi_id),
+      masuk_kerja: orang.masuk_kerja ?? null,
       aktif: orang.aktif,
       hari_kerja: hari.filter((h) => h.status !== 'libur' && h.status !== 'belum').length,
       hadir,
@@ -558,6 +559,15 @@ function rekapBulan(bulan) {
           h.masuk &&
           (h.lokasi_meragukan || !Number.isFinite(h.akurasi) || h.akurasi > 50),
       ).length,
+      ...(rinci
+        ? {
+            harian: hari.map((h) => ({
+              tanggal: h.tanggal,
+              status: h.status,
+              keterangan_libur: h.keterangan_libur,
+            })),
+          }
+        : {}),
     });
   }
 
@@ -635,11 +645,9 @@ async function periksaMagang(isian, { baru, idSendiri = null }) {
   const pin = String(isian.pin ?? '').trim();
   if (pin) {
     if (!/^\d{4,6}$/.test(pin)) throw galat('PIN harus 4 sampai 6 angka.', 422);
-    const hash = await hashPin(pin);
-    if (toko.pengguna.some((u) => u.id !== idSendiri && u.pin_hash === hash)) {
-      throw galat('PIN itu sudah dipakai magang lain. PIN kembar membuat absen tidak jelas milik siapa.', 409);
-    }
-    hasil.pin_hash = hash;
+    // PIN tidak harus unik. Ia berfungsi seperti kata sandi; yang menjadi
+    // identitas adalah NIP.
+    hasil.pin_hash = await hashPin(pin);
   } else if (baru) {
     throw galat('PIN belum diisi.', 422);
   }
@@ -663,12 +671,7 @@ async function periksaMagang(isian, { baru, idSendiri = null }) {
 // selisihnya dengan rumus yang lebih rumit tidak terasa, tetapi rumus ini tetap
 // benar untuk jarak jauh dan tidak butuh API berbayar.
 
-const RADIUS_BAWAAN = 50; // meter, pembanding "masih di area kantor"
-// Di atas ini, titik GPS dianggap terlalu kasar untuk dijadikan dasar
-// pencatatan. PC kiosk tanpa GPS bisa melaporkan ratusan meter; untuk mode
-// "kantor" angkanya hanya ditandai, sedangkan untuk "luar" titiknya ditolak
-// karena tujuannya memang melacak posisi.
-const AKURASI_MAKS = 150; // meter
+const RADIUS_BAWAAN = 250; // meter, pembanding "masih di area kantor"
 
 const radian = (derajat) => (derajat * Math.PI) / 180;
 
@@ -711,28 +714,18 @@ function periksaLokasiLuar({ lokasi, lintang, bujur, akurasi }) {
       422,
     );
   }
-  if (!Number.isFinite(akurasi) || akurasi < 0) {
-    throw galat(
-      'Akurasi GPS tidak terkirim. Nyalakan lokasi presisi di perangkat ini, lalu ambil lokasi ulang.',
-      422,
-    );
-  }
-  if (akurasi > AKURASI_MAKS) {
-    throw galat(
-      `Akurasi GPS ±${Math.round(akurasi)} m terlalu rendah untuk mencatat posisi Anda. ` +
-        'Nyalakan GPS/lokasi presisi, tunggu sampai akurasinya membaik, lalu coba lagi.',
-      422,
-    );
+  if (Number.isFinite(akurasi) && akurasi < 0) {
+    throw galat('Akurasi GPS tidak boleh negatif.', 422);
   }
 
   const jarak = Math.round(jarakMeter(lintang, bujur, lokasi.lintang, lokasi.bujur));
 
   return {
     jarak_m: jarak,
-    akurasi: Math.round(akurasi),
-    // Bukan penolakan, tetapi admin perlu tahu bahwa angkanya kasar. Nilai ini
-    // ditampilkan sebagai catatan kecil, bukan dipakai menghakimi sendiri.
-    lokasi_meragukan: akurasi > 50,
+    akurasi: Number.isFinite(akurasi) ? Math.round(akurasi) : null,
+    // Bukan penolakan. Titik yang kasar atau tanpa akurasi tetap dicatat,
+    // tetapi admin perlu tahu bahwa angkanya tidak bisa dipercaya penuh.
+    lokasi_meragukan: !Number.isFinite(akurasi) || akurasi > 50,
   };
 }
 
@@ -1012,7 +1005,16 @@ async function tanggapiAsli(metode, jalur, dataKirim, token) {
     }
 
     const terpasang = aktif.find((l) => l.id === perangkat.lokasi_id) ?? lokasi;
-    return { id: terpasang.id, nama: terpasang.nama, kiosk_id: perangkat.id };
+    return {
+      id: terpasang.id,
+      nama: terpasang.nama,
+      // Sama seperti backend: titik dan radius ikut supaya kiosk bisa
+      // menunjukkan jarak. Yang memutuskan tetap server.
+      lintang: Number.isFinite(Number(terpasang.lintang)) ? Number(terpasang.lintang) : null,
+      bujur: Number.isFinite(Number(terpasang.bujur)) ? Number(terpasang.bujur) : null,
+      radius_m: Number(terpasang.radius_m) > 0 ? Number(terpasang.radius_m) : 250,
+      kiosk_id: perangkat.id,
+    };
   }
 
   if (metode === 'POST' && tanpaKueri === '/kiosk/absen') {
@@ -1092,9 +1094,9 @@ async function tanggapiAsli(metode, jalur, dataKirim, token) {
     const lokasiId = perangkat.lokasi_id;
     const lokasiAbsen = toko.lokasi.find((l) => l.id === lokasiId) ?? null;
 
-    // "Dinas luar" wajib membawa koordinat — itu satu-satunya isi dari pilihan
-    // tersebut, dan admin perlu tahu di mana orangnya bertugas. Tanpa aturan
-    // ini, "di luar" cuma tulisan tanpa keterangan.
+    // "Dinas luar" dianjurkan membawa koordinat, tetapi perangkat kiosk bisa
+    // tidak punya layanan lokasi. Absennya tetap diterima dan ditandai; tidak
+    // ada koordinat yang dikarang.
     //
     // Jarak dihitung DI SINI, di sisi server, lalu DISIMPAN sebagai keterangan.
     // Jarak tidak dipakai menolak: orang yang sedang dinas luar memang jauh.
@@ -1115,8 +1117,8 @@ async function tanggapiAsli(metode, jalur, dataKirim, token) {
     const akurasi = angka(dataKirim?.akurasi);
     const adaTitik = Number.isFinite(lintang) && Number.isFinite(bujur);
 
-    if (mode === 'luar' && !adaTitik) {
-      throw galat('Koordinat lokasi tidak sah. Ambil ulang lokasinya.', 422);
+    if (!adaTitik && Number.isFinite(akurasi)) {
+      throw galat('Akurasi GPS hanya boleh dikirim bersama lintang dan bujur.', 422);
     }
 
     if (adaTitik) {
@@ -1159,6 +1161,10 @@ async function tanggapiAsli(metode, jalur, dataKirim, token) {
       // Alamat manusiawi dari Nominatim. Kalau gagal, absen tetap jalan dan
       // admin masih melihat koordinat + tautan peta.
       koordinat.lokasi_teks = await geokodeTerbalik(koordinat.lintang, koordinat.bujur);
+    } else if (mode === 'luar') {
+      // Tanpa koordinat sama sekali. Server asli menandai baris ini, bukan
+      // menolaknya; rekap admin yang memutuskan perlu diperiksa atau tidak.
+      lokasiMeragukan = true;
     }
 
     const tanggal = data.tanggalISO(data.hariIni);
@@ -1220,6 +1226,7 @@ async function tanggapiAsli(metode, jalur, dataKirim, token) {
       jarak_m: catatan.jarak_m,
       akurasi: catatan.akurasi,
       lokasi_teks: catatan.lokasi_teks,
+      lokasi_tersedia: catatan.lintang !== null && catatan.bujur !== null,
       lokasi_meragukan: catatan.lokasi_meragukan,
     };
   }
@@ -1351,15 +1358,123 @@ async function tanggapiAsli(metode, jalur, dataKirim, token) {
     };
   }
 
+  // ── audit dan anomali ────────────────────────────────────────────────────
+
+  // Tanggal audit disimpan sebagai waktu lengkap; layar memfilter per hari
+  // menurut jam kantor, jadi perbandingannya juga harus di jam kantor.
+  const hariJakarta = (iso) =>
+    new Date(iso).toLocaleDateString('en-CA', { timeZone: 'Asia/Jakarta' });
+
+  if (metode === 'GET' && tanpaKueri === '/admin/audit') {
+    await adminSaja(token);
+
+    const sampai = kueri.get('sampai') || data.tanggalISO(data.hariIni);
+    const dari = kueri.get('dari') || data.tanggalISO(data.geserHari(data.hariIni, -29));
+    const aksi = String(kueri.get('aksi') ?? '').trim();
+    const per = Math.min(100, Math.max(1, Math.round(Number(kueri.get('per')) || 50)));
+    const halaman = Math.max(1, Math.round(Number(kueri.get('halaman')) || 1));
+
+    const saring = toko.audit
+      .filter((a) => {
+        const hari = hariJakarta(a.waktu);
+        return hari >= dari && hari <= sampai && (!aksi || a.aksi === aksi);
+      })
+      .sort((a, b) => (a.waktu < b.waktu ? 1 : a.waktu > b.waktu ? -1 : 0));
+
+    const total = saring.length;
+    const terakhir = Math.max(1, Math.ceil(total / per));
+
+    return {
+      data: saring.slice((halaman - 1) * per, halaman * per).map((a) => {
+        const aktor = toko.pengguna.find((u) => u.id === a.pengguna_id) ?? null;
+        return {
+          id: a.id,
+          waktu: a.waktu,
+          aksi: a.aksi,
+          pengguna_id: a.pengguna_id ?? null,
+          aktor: aktor
+            ? { nama: aktor.nama, nip: aktor.nip }
+            : a.nama
+              ? { nama: a.nama, nip: '—' }
+              : null,
+          rincian: a.rincian ?? {},
+          ip: a.ip ?? null,
+          user_agent: a.user_agent ?? null,
+        };
+      }),
+      meta: { halaman: Math.min(halaman, terakhir), per, total, terakhir },
+    };
+  }
+
+  // Anomali tiruan diturunkan dari baris absen yang ada, dengan aturan yang
+  // sama seperti backend asli. Jenis yang butuh riwayat percobaan masuk (PIN
+  // salah berulang, perpindahan mustahil) tidak bisa dibuat di sini karena
+  // mode tiruan tidak menyimpan percobaannya.
+  if (metode === 'GET' && tanpaKueri === '/admin/anomali') {
+    await adminSaja(token);
+
+    const sampai = kueri.get('sampai') || data.tanggalISO(data.hariIni);
+    const dari = kueri.get('dari') || data.tanggalISO(data.geserHari(data.hariIni, -6));
+
+    const daftar = [];
+
+    for (const a of toko.absen) {
+      if (a.tanggal < dari || a.tanggal > sampai) continue;
+
+      const u = toko.pengguna.find((p) => p.id === a.pengguna_id) ?? null;
+      const dasar = {
+        absen_id: a.id,
+        pengguna_id: a.pengguna_id,
+        nama: u?.nama ?? a.nama ?? null,
+        nip: u?.nip ?? a.nip ?? null,
+        waktu: a.waktu,
+      };
+
+      if (a.mode === 'luar' && (a.lokasi_meragukan || a.akurasi > 50)) {
+        const tanpaTitik = a.lintang === null || a.lintang === undefined;
+
+        daftar.push({
+          ...dasar,
+          jenis: 'lokasi_meragukan',
+          tingkat: 'sedang',
+          judul: tanpaTitik ? 'Lokasi tidak tersedia' : 'Lokasi kasar',
+          keterangan: tanpaTitik
+            ? 'Absen luar dikirim tanpa koordinat perangkat.'
+            : `Absen luar dengan akurasi ${Math.round(a.akurasi)} m.`,
+        });
+      }
+
+      if (a.mode === 'luar' && a.jarak_m > 100_000) {
+        daftar.push({
+          ...dasar,
+          jenis: 'jarak_jauh',
+          tingkat: 'rendah',
+          judul: 'Jarak jauh dari kantor',
+          keterangan: `Absen luar ${Math.round(a.jarak_m / 1000)} km dari kantor. Dinas luar boleh jauh; periksa hanya jika tidak sesuai.`,
+        });
+      }
+
+      // `foto_hilang` sengaja tidak dibuat di sini: mode tiruan membuang foto
+      // saat menyimpan ke localStorage, jadi setiap baris lama akan tampak
+      // kehilangan foto padahal bukan.
+    }
+
+    daftar.sort((a, b) => (a.waktu < b.waktu ? 1 : a.waktu > b.waktu ? -1 : 0));
+
+    return { dari, sampai, data: daftar };
+  }
+
   // ── data master ──────────────────────────────────────────────────────────
   //
   // Empat layar data master memakai pola yang sama: daftar, tambah, ubah.
   //
-  // Magang dan lokasi sengaja TIDAK punya endpoint hapus. Keduanya dirujuk
-  // oleh baris absen yang sudah terjadi: menghapus "Gudang Cikarang" membuat
-  // absen orang yang bekerja di sana kehilangan tempatnya, dan menghapus
-  // magang membuat riwayat kehadirannya menggantung. Menutup lokasi atau
-  // memberhentikan orang berarti menonaktifkannya.
+  // Lokasi sengaja TIDAK punya endpoint hapus: menghapus "Gudang Cikarang"
+  // membuat absen orang yang bekerja di sana kehilangan tempatnya. Menutup
+  // lokasi berarti menonaktifkannya.
+  //
+  // Magang boleh dihapus, tetapi penghapusannya harus utuh: absen, izin, dan
+  // sesinya ikut dibuang. Kalau hanya baris pengguna yang hilang, rekap akan
+  // menghitung orang yang tidak ada dan halaman riwayat kehilangan pemiliknya.
   //
   // Hari libur dan shift boleh dihapus, tapi syaratnya berbeda. Hari libur
   // tidak dirujuk siapa pun — dia cuma penanda tanggal, dan tanggal yang salah
@@ -1440,6 +1555,39 @@ async function tanggapiAsli(metode, jalur, dataKirim, token) {
       aktif: orang.aktif,
     });
     return tanpaRahasia(orang);
+  }
+
+  if (metode === 'DELETE' && idMagang) {
+    const aku = await adminSaja(token);
+    const indeks = toko.pengguna.findIndex((u) => u.id === Number(idMagang));
+    if (indeks === -1) throw galat('Magang tidak ditemukan.', 404);
+
+    const orang = toko.pengguna[indeks];
+    if (orang.id === aku.id) {
+      throw galat('Anda tidak bisa menghapus akun sendiri.', 422);
+    }
+
+    toko.absen = toko.absen.filter((a) => a.pengguna_id !== orang.id);
+    toko.izin = toko.izin.filter((z) => z.pengguna_id !== orang.id);
+    toko.sesi = toko.sesi.filter((s) => s.pengguna_id !== orang.id);
+
+    // Jejak audit tetap ada; yang dilepas hanya kaitan ke akun yang sudah
+    // tidak ada. Tindakan penghapusan sendiri dicatat setelah ini.
+    for (const a of toko.audit) {
+      if (a.pengguna_id === orang.id) a.pengguna_id = null;
+    }
+    for (const z of toko.izin) {
+      if (z.diputuskan_oleh === orang.id) z.diputuskan_oleh = null;
+    }
+
+    toko.pengguna.splice(indeks, 1);
+    catatAudit(aku, 'hapus_magang', {
+      pengguna_id: orang.id,
+      nip: orang.nip,
+      nama: orang.nama,
+    });
+
+    return { ok: true };
   }
 
   if (metode === 'GET' && tanpaKueri === '/admin/lokasi') {
@@ -1846,7 +1994,7 @@ async function tanggapiAsli(metode, jalur, dataKirim, token) {
     const bulan = kueri.get('bulan') || data.tanggalISO(data.hariIni).slice(0, 7);
     if (!/^\d{4}-\d{2}$/.test(bulan)) throw galat('Bulan tidak dikenali.', 422);
 
-    const baris = rekapBulan(bulan);
+    const baris = rekapBulan(bulan, kueri.get('rinci') === '1');
     const jumlah = (kolom) => baris.reduce((n, r) => n + r[kolom], 0);
 
     return {

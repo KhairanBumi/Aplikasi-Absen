@@ -1,9 +1,8 @@
-# Aplikasi Absen — Backend Fase 1
+# Aplikasi Absen — Backend
 
-Backend Laravel untuk Aplikasi Absen. Isi repo ini **Fase 1** plus sebagian
-Fase 2: tulis lokasi (`POST/PUT /admin/lokasi`) dan laporan admin
-(`GET /admin/laporan`, `GET /admin/laporan/harian`). Endpoint Fase 2 lain
-(riwayat magang, izin/cuti, tulis shift/hari libur) belum dibuat.
+Backend Laravel untuk Aplikasi Absen. Seluruh endpoint pada `KONTRAK-API.md`
+sudah tersedia, termasuk riwayat, izin/cuti, shift, hari libur, audit, dan
+anomali. Petunjuk produksi ada di `docs/OPERASIONAL.md` dan `docs/RILIS.md`.
 
 ## Stack
 
@@ -73,14 +72,27 @@ bukan bug.
 | POST | `/api/masuk` | NIP + PIN, rate limit |
 | POST | `/api/keluar` | Cabut token |
 | GET | `/api/saya/profil` | Profil pengguna aktif |
+| GET | `/api/saya/absen` | Riwayat harian magang satu bulan |
+| GET | `/api/saya/izin` | Riwayat izin + kuota cuti magang |
+| POST | `/api/saya/izin` | Ajukan izin/cuti/sakit |
 | GET | `/api/admin/dashboard` | Ringkasan beranda |
 | GET | `/api/admin/magang` | Semua akun + daftar divisi |
 | POST | `/api/admin/magang` | Buat akun |
 | PUT | `/api/admin/magang/{id}` | Ubah sebagian, reset PIN |
+| GET | `/api/admin/izin` | Daftar izin + jumlah tiap status |
+| POST | `/api/admin/izin/{id}/setujui` | Setujui pengajuan |
+| POST | `/api/admin/izin/{id}/tolak` | Tolak pengajuan + catatan |
 | GET | `/api/admin/lokasi` | Semua lokasi |
 | POST | `/api/admin/lokasi` | Tambah lokasi |
 | PUT | `/api/admin/lokasi/{id}` | Ubah lokasi |
 | GET | `/api/admin/shift` | Semua shift |
+| POST | `/api/admin/shift` | Tambah shift |
+| PUT | `/api/admin/shift/{id}` | Ubah shift (parsial) |
+| DELETE | `/api/admin/shift/{id}` | Hapus shift bila tidak dipakai |
+| GET | `/api/admin/hari-libur` | Daftar hari libur |
+| POST | `/api/admin/hari-libur` | Tambah hari libur |
+| PUT | `/api/admin/hari-libur/{id}` | Ubah hari libur |
+| DELETE | `/api/admin/hari-libur/{id}` | Hapus hari libur |
 | GET | `/api/admin/laporan` | Rekap absen semua magang satu bulan |
 | GET | `/api/admin/laporan/harian` | Rincian harian satu magang |
 | GET | `/api/kiosk/lokasi` | Lokasi perangkat |
@@ -95,10 +107,10 @@ Kontrak bentuk response ada di `../KONTRAK-API.md`.
 php artisan test
 ```
 
-Tes fitur mencakup login/profil/logout, rate limit, CRUD magang, tulis lokasi,
-laporan bulanan/harian, penolakan perangkat kiosk asing, absen masuk/pulang/ketiga,
-validasi foto, mode luar, dashboard hari kerja/libur, signed URL foto, dan
-penolakan akses langsung ke folder privat.
+Tes fitur mencakup login/profil/logout, rate limit, CRUD magang, lokasi, shift,
+hari libur, laporan bulanan/harian, riwayat magang, pengajuan/izin admin,
+kuota cuti, serta kiosk (masuk/pulang/ketiga, validasi foto, mode luar,
+perangkat asing, signed URL foto).
 
 ## Catatan keamanan
 

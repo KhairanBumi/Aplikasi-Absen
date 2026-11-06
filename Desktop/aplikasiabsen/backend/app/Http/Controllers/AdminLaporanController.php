@@ -21,7 +21,12 @@ class AdminLaporanController extends Controller
         $akhir = $awal->copy()->endOfMonth()->startOfDay();
         $rentang = [$awal->toDateString(), $akhir->toDateString()];
 
-        $pengguna = Pengguna::with('shift')
+        // Ekspor CSV meminta `rinci=1` supaya ikut menerima status tiap hari.
+        // Tanpa parameter itu balasannya tetap ringkas seperti biasa: satu
+        // baris per orang tanpa 31 entri harian yang tidak dibaca layar rekap.
+        $rinci = $request->query('rinci') === '1';
+
+        $pengguna = Pengguna::with(['shift', 'lokasi'])
             ->where(function ($q) use ($rentang) {
                 $q->where(function ($q) {
                     $q->where('peran', 'magang')->where('aktif', true);
@@ -30,23 +35,32 @@ class AdminLaporanController extends Controller
                         ->from('absen')
                         ->whereColumn('absen.pengguna_id', 'pengguna.id')
                         ->whereBetween('absen.tanggal', $rentang);
+                })->orWhereExists(function ($q) use ($rentang) {
+                    $q->selectRaw('1')
+                        ->from('izin')
+                        ->whereColumn('izin.pengguna_id', 'pengguna.id')
+                        ->where('izin.status', 'disetujui')
+                        ->whereDate('izin.mulai', '<=', $rentang[1])
+                        ->whereDate('izin.selesai', '>=', $rentang[0]);
                 });
             })
             ->orderBy('nama')
             ->get();
 
-        $data = $pengguna->map(function (Pengguna $orang) use ($awal) {
+        $data = $pengguna->map(function (Pengguna $orang) use ($awal, $rinci) {
             $harian = Harian::susun($orang, $awal);
             $hari = collect($harian['data']);
             $luar = $hari->where('mode', 'luar');
 
-            return [
+            $baris = [
                 'pengguna_id' => $orang->id,
                 'nip' => $orang->nip,
                 'nama' => $orang->nama,
                 'divisi' => $orang->divisi,
                 'nik' => $orang->nik,
                 'shift' => $orang->shift?->nama,
+                'lokasi' => $orang->lokasi?->nama,
+                'masuk_kerja' => $orang->masuk_kerja?->toDateString(),
                 'aktif' => (bool) $orang->aktif,
                 'hari_kerja' => $harian['hari_kerja'],
                 'hadir' => $harian['ringkasan']['hadir'],
@@ -62,6 +76,22 @@ class AdminLaporanController extends Controller
                         || (is_numeric($h['akurasi']) && $h['akurasi'] > 50)
                 )->count(),
             ];
+
+            if ($rinci) {
+                // Hanya tiga kolom yang dibutuhkan matriks CSV. Titik GPS,
+                // foto, dan alamat tidak ikut: baris yang tidak dipakai jangan
+                // dikirim, apalagi foto 50 orang sekaligus.
+                $baris['harian'] = array_map(
+                    fn (array $h) => [
+                        'tanggal' => $h['tanggal'],
+                        'status' => $h['status'],
+                        'keterangan_libur' => $h['keterangan_libur'],
+                    ],
+                    $harian['data']
+                );
+            }
+
+            return $baris;
         })->values();
 
         $hariIni = now()->startOfDay();

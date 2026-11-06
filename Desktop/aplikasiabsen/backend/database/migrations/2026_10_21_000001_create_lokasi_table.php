@@ -14,7 +14,7 @@ return new class extends Migration
             $table->string('alamat', 255)->nullable();
             $table->decimal('lintang', 10, 7);
             $table->decimal('bujur', 10, 7);
-            $table->unsignedInteger('radius_m')->default(50);
+            $table->unsignedInteger('radius_m')->default(250);
             $table->boolean('aktif')->default(true);
             $table->timestamps();
         });

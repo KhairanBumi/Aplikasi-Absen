@@ -1,13 +1,6 @@
 import { api, simpanSesi } from '../api.js';
 import { tampilkanGalat, sembunyikanGalat, beritahu, jamBerjalan, KELAS_ISIAN } from '../ui.js';
 
-const IKON_MEREK = `
-  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"
-       stroke-linecap="round" stroke-linejoin="round" class="size-7" aria-hidden="true">
-    <circle cx="12" cy="12" r="8.6" />
-    <path d="M12 7.2V12l3.1 1.9" />
-  </svg>`;
-
 const IKON_GALAT = `
   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"
        stroke-linecap="round" stroke-linejoin="round" class="size-5 shrink-0" aria-hidden="true">
@@ -35,24 +28,26 @@ export default {
 
   mount(akar) {
     akar.innerHTML = `
-      <main class="flex min-h-dvh flex-col items-center justify-center px-5 py-8">
+      <main id="isi-utama" tabindex="-1" class="flex min-h-dvh flex-col items-center justify-center px-4 py-6 outline-none sm:px-5 sm:py-8">
         <div class="w-full max-w-[26rem]">
 
           <div class="mb-6 text-center">
-            <span class="mx-auto grid size-14 place-items-center rounded-[1.15rem] bg-white/70 text-merek
-                         shadow-naik ring-1 ring-white/80 backdrop-blur-xl">
-              ${IKON_MEREK}
+            <span class="mx-auto flex w-fit px-4 py-3">
+              <img src="/bpjs-logo.png" alt="BPJS Ketenagakerjaan"
+                   width="301" height="72" class="h-10 w-auto sm:h-11" />
             </span>
-            <p class="mt-4 text-sm font-medium text-muted">Aplikasi Absen</p>
-            <p data-jam class="angka-rata mt-1 text-[3.25rem] leading-none font-semibold tracking-tight text-ink">
+            <p class="mt-3 inline-flex rounded-full bg-white/60 px-3 py-1 text-xs font-medium text-ink/70 sm:text-sm">
+              Aplikasi Absen
+            </p>
+            <p data-jam class="angka-rata mt-1 text-5xl leading-none font-semibold tracking-tight text-ink sm:text-[3.25rem]">
               --.--.--
             </p>
-            <p data-tanggal class="mt-2 text-sm text-muted">—</p>
+            <p data-tanggal class="mt-2 inline-flex rounded-full bg-white/60 px-3 py-1 text-xs text-ink/70 sm:text-sm">—</p>
           </div>
 
-          <div class="kaca rounded-[1.75rem] p-6 sm:p-7">
+          <div class="kaca rounded-[1.75rem] p-5 sm:p-7">
             <h1 class="text-xl font-semibold tracking-tight text-ink">Selamat datang kembali</h1>
-            <p class="mt-1 text-sm text-muted">Masuk dengan NIP dan PIN Anda.</p>
+            <p class="mt-1 text-sm text-ink/70">Masuk dengan NIP dan PIN Anda.</p>
 
             <div data-galat role="alert" hidden
                  class="mt-5 flex items-start gap-2.5 rounded-xl border border-rose-500/25 bg-rose-500/10 p-3 text-sm text-rose-900">
@@ -71,7 +66,7 @@ export default {
                 <label for="pin" class="mb-1.5 block text-sm font-medium text-ink">PIN</label>
                 <input id="pin" name="pin" type="password" inputmode="numeric" autocomplete="off" required
                        placeholder="4 sampai 6 angka" class="${KELAS_ISIAN}" />
-                <p class="mt-1.5 text-xs text-muted">Sama dengan PIN yang Anda ketik di kiosk.</p>
+                <p class="mt-1.5 text-xs text-ink/70">Sama dengan PIN yang Anda ketik di kiosk.</p>
               </div>
 
               <button type="submit" class="${KELAS_TOMBOL}">

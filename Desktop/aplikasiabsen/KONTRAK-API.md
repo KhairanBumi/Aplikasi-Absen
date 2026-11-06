@@ -363,8 +363,8 @@ Aturan yang perlu diikuti:
    - `lintang`, `bujur`, `akurasi` (boleh `null` untuk baris lama),
    - `jarak_m` — hasil hitungan Haversine **saat absen**, bukan dihitung ulang
      saat dashboard dibuka,
-   - `lokasi_meragukan` — `true` kalau akurasi GPS kasar atau ada tanda lain
-     yang layak diperiksa admin,
+   - `lokasi_meragukan` — `true` kalau akurasi GPS kasar, akurasi/koordinat
+     tidak tersedia, atau ada tanda lain yang layak diperiksa admin,
    - `lokasi_teks` — alamat pendek hasil reverse geocoding (Nominatim/OSM,
      gratis). Kalau layanan sedang gagal, kirim `null`; frontend tetap
      menampilkan koordinat dan tautan peta.
@@ -383,22 +383,34 @@ Identitas kiosk. Dipanggil layar absen saat dibuka, tanpa login.
 
 ```json
 // berhasil — 200
-{ "id": 2, "nama": "Gudang Cikarang", "kiosk_id": "9f4c..." }
+{
+  "id": 2,
+  "nama": "Gudang Cikarang",
+  "lintang": -6.2843,
+  "bujur": 107.166,
+  "radius_m": 250,
+  "kiosk_id": "9f4c..."
+}
 ```
 
 - `id` datang dari alamat halaman: `#/absen?lokasi=2`. Satu PC kiosk = satu
   alamat tetap, diatur saat pemasangan. Tanpa parameter, kembalikan lokasi
   pertama.
+- `lintang`, `bujur`, dan `radius_m` dipakai kiosk **hanya untuk menampilkan**
+  jarak dan status di dalam/di luar radius. Server tetap satu-satunya yang
+  menghitung `jarak_m` saat absen, dan jarak tidak pernah menjadi alasan
+  penolakan.
 - `perangkat` adalah identitas perangkat yang stabil. Server menyimpan daftar
   perangkat kiosk yang sah beserta lokasi yang terikat ke perangkat itu.
   Pendaftaran perangkat baru sebaiknya disetujui admin; jangan menerima id
-  acak sebagai kiosk sah.
+  acak sebagai kiosk sah. Frontend mengambil id ini dari `VITE_KIOSK_ID`
+  (diisi saat pemasangan) atau, kalau kosong, dari `localStorage`.
 - Setelah terikat, satu perangkat hanya boleh memakai satu lokasi. Mengubah
   `?lokasi=` di URL tidak boleh memindahkan kiosk.
-- Cuma dipakai untuk menampilkan badge nama lokasi di sudut layar. Kalau
-  endpoint ini gagal, kiosk tetap bisa dipakai — jadi jangan jadikan syarat
-  untuk absen. Namun `POST /kiosk/absen` tetap menolak perangkat yang belum
-  terdaftar.
+- Badge nama lokasi di sudut layar memakai `nama`. Kalau endpoint ini gagal,
+  kiosk tetap bisa dipakai — jadi jangan jadikan syarat untuk absen. Namun
+  `POST /kiosk/absen` tetap menolak perangkat yang belum terdaftar, dan
+  frontend menampilkan ID perangkatnya supaya admin bisa mendaftarkan.
 - Nama lokasinya salah tulis? Yang tertulis di layar kiosk ikut salah. Itu
   memang gunanya: admin langsung tahu ada kiosk yang salah setel.
 
@@ -408,7 +420,7 @@ Identitas kiosk. Dipanggil layar absen saat dibuka, tanpa login.
 menyimpan token siapa pun di `localStorage`-nya.
 
 ```json
-// permintaan — dinas luar, koordinat wajib ikut
+// permintaan — dinas luar, koordinat ikut bila perangkat punya lokasi
 {
   "nip": "MGG002",
   "pin": "2222",
@@ -418,7 +430,8 @@ menyimpan token siapa pun di `localStorage`-nya.
   "mode": "luar",
   "lintang": -6.208812,
   "bujur": 106.845599,
-  "akurasi": 12
+  "akurasi": 12,
+  "kunci_idempoten": "8f14e45f-ceea-467f-a1c3-0d3b4f5e6a71"
 }
 ```
 
@@ -433,6 +446,7 @@ menyimpan token siapa pun di `localStorage`-nya.
 ```json
 // berhasil — 200
 {
+  "id": 91,
   "tipe": "masuk",
   "nama": "Siti Rahayu",
   "nip": "MGG002",
@@ -442,7 +456,9 @@ menyimpan token siapa pun di `localStorage`-nya.
   "jarak_m": 4370,
   "akurasi": 12,
   "lokasi_teks": "Gambir, Jakarta Pusat",
-  "lokasi_meragukan": false
+  "lokasi_tersedia": true,
+  "lokasi_meragukan": false,
+  "idempoten": false
 }
 ```
 
@@ -476,23 +492,26 @@ Aturan yang **wajib** dipatuhi backend:
 7. **`mode` berisi `"kantor"` atau `"luar"`.** Simpan apa adanya di baris absen;
    kalau tidak dikirim atau isinya lain, anggap `"kantor"`. Fotonya tetap wajib
    di dua-duanya — `mode` cuma keterangan tempat, bukan izin istimewa.
-8. **`mode: "luar"` wajib membawa koordinat DAN akurasi.** `lintang` (−90…90)
-   dan `bujur` (−180…180) wajib berupa angka; `akurasi` (meter) wajib angka
-   yang masuk akal. Kalau tidak ada, balas `422` dengan pesan yang bisa dibaca
-   magang — jangan diam-diam menganggapnya `0`.
+8. **`mode: "luar"` boleh dikirim tanpa koordinat.** Perangkat kiosk bisa
+   tidak punya layanan lokasi — layanan lokasi Windows/HP bisa dimatikan.
+   Kalau `lintang`/`bujur` dikirim, keduanya harus berpasangan dan sah
+   (−90…90 / −180…180); `akurasi` (meter) boleh `null`. Koordinat separuh atau
+   `akurasi` tanpa koordinat → `422` dengan `kode: "koordinat_tidak_lengkap"`.
+   Jangan mengarang koordinat di server. Absen luar tanpa koordinat tetap
+   `200`, dengan `lokasi_tersedia: false` dan `lokasi_meragukan: true`.
 9. **Jarak dihitung di server, bukan di frontend, dan TIDAK dipakai menolak
    absen dinas luar.** Titik kantor diambil dari `lokasi.lintang` /
    `lokasi.bujur` (lihat `GET /admin/lokasi`), lalu dihitung dengan **rumus
    Haversine**. Simpan hasilnya di `jarak_m`. Magang yang sedang dinas di luar
    memang jauh dari kantor — menolak karena `jarak_m > radius_m` akan membuat
-   fitur ini tidak bisa dipakai. `radius_m` (bawaan **50**) hanya pembanding
+   fitur ini tidak bisa dipakai. `radius_m` (bawaan **250**) hanya pembanding
    "masih di area kantor", bukan pagar. **Abaikan** `jarak_m` yang dikirim
    klien — angka itu bisa diubah sebelum dikirim.
-10. **Akurasi GPS ikut disimpan dan diperiksa.** `akurasi` adalah jari-jari
-    perkiraan dalam meter, bukan jaminan. Tolak `422` kalau `akurasi` hilang
-    atau lebih besar dari **150 m**, karena pada angka itu titiknya terlalu
-    kasar untuk dicatat. Simpan nilai aslinya; frontend menampilkannya sebagai
-    "± N m", dan admin perlu tahu itu perkiraan.
+10. **Akurasi GPS disimpan apa adanya, tidak dipakai menolak.** `akurasi`
+    adalah jari-jari perkiraan dalam meter, bukan jaminan. Angka kasar atau
+    `null` tetap diterima; server menandai `lokasi_meragukan: true` supaya
+    admin bisa memeriksa. Ini juga berlaku untuk `mode: "luar"` tanpa
+    koordinat. Frontend menampilkannya sebagai "± N m" atau "tidak tercatat".
 11. **`mode: "kantor"` tidak wajib mengirim koordinat.** Kiosk ini PC kantor
     yang tidak berpindah; sebagian PC tidak punya GPS dan browsernya menebak
     dari Wi-Fi/IP. Untuk mode ini, pertahanan yang dipakai adalah **perangkat
@@ -508,6 +527,17 @@ Aturan yang **wajib** dipatuhi backend:
     menampilkan koordinat + tautan peta. Jangan memakai layanan berbayar untuk
     kebutuhan ini.
 13. Gagal validasi → `422` dengan `message`, bukan halaman HTML.
+14. **Klien boleh mengirim `kunci_idempoten`.** Nilainya 8–80 karakter dari
+    `A-Z`, `a-z`, `0-9`, titik, garis bawah, atau tanda hubung. Kunci dibuat
+    sekali untuk satu percobaan absen dan dipakai ulang saat klien mengirim
+    ulang setelah jaringan putus.
+15. **Kunci yang sama untuk NIP dan `kiosk_id` yang sama mengembalikan hasil
+    pertama.** Status `200`, `idempoten: true`, `id` sama, dan tidak ada baris
+    absen atau foto baru. Ini yang membuat tombol "kirim ulang" aman.
+16. **Kunci yang sama untuk NIP berbeda dibalas `409` dengan
+    `kode: "kunci_bentrok"`.** Jangan mengembalikan data absen orang lain.
+17. **Tanpa `kunci_idempoten`, perilaku lama berlaku.** Klien lama tetap bisa
+    absen, tetapi tidak mendapat perlindungan dari pengiriman ganda.
 
 > **Kenapa perangkat kiosk terdaftar tetap wajib walaupun sudah ada GPS.**
 > Koordinat datang dari browser dan bisa dipalsukan dengan aplikasi Fake GPS
@@ -540,11 +570,13 @@ berlaku untuk keempatnya:
   ikut tidak disentuh. Tombol Aktifkan/Nonaktifkan di layar Anak Magang cuma
   mengirim `{ "aktif": false }` — endpoint yang menuntut kiriman lengkap akan
   menolaknya, dan penonaktifannya tidak pernah terjadi.
-- **Tidak ada `DELETE` untuk magang dan lokasi.** Keduanya dirujuk oleh baris
-  absen. Menghapus sebuah lokasi membuat absen orang-orang yang bekerja di sana
-  kehilangan tempatnya; menghapus magang membuat riwayat kehadirannya
-  menggantung tanpa pemiliknya. Menutup lokasi atau memberhentikan orang berarti
-  mengubah `aktif` menjadi `false`.
+- **Tidak ada `DELETE` untuk lokasi.** Lokasi dirujuk oleh baris absen;
+  menghapusnya membuat absen orang-orang yang bekerja di sana kehilangan
+  tempatnya. Menutup lokasi berarti mengubah `aktif` menjadi `false`.
+- **Magang punya `DELETE` yang menghapus seluruh jejaknya.** Menonaktifkan tetap
+  pilihan default untuk orang yang berhenti, karena riwayatnya harus utuh.
+  `DELETE /admin/magang/{id}` disediakan untuk akun yang memang salah dibuat —
+  rinciannya di bawah.
 - **Hari libur dan shift punya `DELETE`, syaratnya berbeda.** Hari libur tidak
   dirujuk siapa pun, jadi selalu boleh dihapus. Shift hanya boleh dihapus kalau
   belum ada yang memakainya — rinciannya di `DELETE /admin/shift/{id}`.
@@ -639,8 +671,9 @@ bisa dijawab tanpa membersihkan datanya dulu.
   dan pesan yang tidak menyebut kolomnya memaksa admin menebak.
 - `409` juga kalau email diisi dan sudah dipakai orang lain. Kalau kosong, tidak
   ada yang perlu diperiksa — dua orang tanpa email bukan bentrok.
-- `409` juga kalau PIN-nya sudah dipakai orang lain. Dua orang dengan PIN sama
-  membuat absen tidak jelas milik siapa.
+- **PIN boleh sama antar pengguna.** Ia berfungsi seperti kata sandi, bukan
+  identitas; memaksa PIN unik justru memudahkan orang menebak milik siapa.
+  Jangan menolak PIN kembar. Yang wajib unik adalah NIP (dan email bila diisi).
 - NIP sebaiknya disimpan huruf besar. `"mgg001"` dan `"MGG001"` adalah orang
   yang sama, dan frontend sudah menaikkan hurufnya sebelum mengirim — tapi
   jangan bergantung pada itu.
@@ -672,6 +705,31 @@ wajib diingat: pemeriksaan `aktif` harus ada di `POST /masuk` **dan** di
 `POST /kiosk/absen`. Kalau hanya ada di `GET /saya/profil`, orang yang baru
 dinonaktifkan masih bisa masuk hari itu juga.
 
+#### `DELETE /admin/magang/{id}`
+
+Menghapus akun **beserta seluruh data kehadirannya**. Ini berbeda dari
+menonaktifkan dan tidak bisa dibatalkan.
+
+```json
+// berhasil — 200
+{ "ok": true }
+```
+
+- Hapus baris `absen` dan `izin` milik pengguna lebih dulu, lalu baris
+  `pengguna`. Keduanya memakai foreign key `restrict`, jadi urutannya penting.
+  Sesi ikut terhapus (atau cascade).
+- Foto absen dan foto profil milik pengguna ikut dihapus dari disk privat.
+- Jejak **audit tidak dihapus**. Baris yang aktornya pengguna ini dilepas
+  (`pengguna_id = null`) agar riwayat tindakan tidak hilang; tindakan admin yang
+  menghapus dicatat sebagai `hapus_magang` dengan salinan `nip` dan `nama`.
+- `izin.diputuskan_oleh` yang menunjuk pengguna ini diubah menjadi `null`.
+- Admin **tidak boleh menghapus akunnya sendiri** → `422`
+  `"Anda tidak bisa menghapus akun sendiri."` Frontend juga tidak menampilkan
+  tombolnya, tapi server tetap harus menolak.
+- Selain admin → `403` (`tidak_berhak`), ID yang tidak ada → `404`.
+- Konfirmasi di frontend harus menyebut bahwa absen dan izin ikut terhapus.
+  Jangan jadikan tombol ini pengganti Nonaktifkan untuk orang yang berhenti.
+
 #### `GET /admin/lokasi`
 
 ```json
@@ -681,7 +739,7 @@ dinonaktifkan masih bisa masuk hari itu juga.
     {
       "id": 1, "nama": "Kantor Pusat", "aktif": true, "jumlah_magang": 37,
       "alamat": "Jl. Jenderal Sudirman No. 1, Jakarta",
-      "lintang": -6.2246, "bujur": 106.8094, "radius_m": 50
+      "lintang": -6.2246, "bujur": 106.8094, "radius_m": 250
     }
   ]
 }
@@ -692,7 +750,7 @@ dinonaktifkan masih bisa masuk hari itu juga.
 - `lintang`, `bujur`, dan `radius_m` adalah titik kantor. **Wajib dikirim**
   karena frontend menampilkannya, formulir admin memakainya, dan server
   membutuhkannya untuk menghitung `jarak_m` absen dinas luar. `radius_m`
-  (bawaan **50** meter) hanya pembanding area kantor, bukan pagar penolakan.
+  (bawaan **250** meter) hanya pembanding area kantor, bukan pagar penolakan.
 - Kembalikan **semua**, termasuk yang sudah nonaktif. Layar menampilkannya, dan
   formulir magang perlu tetap bisa menampilkan lokasi yang sudah dipilih
   walaupun lokasinya keburu ditutup.
@@ -705,7 +763,7 @@ dinonaktifkan masih bisa masuk hari itu juga.
   "alamat": "Jl. Asia Afrika No. 3",
   "lintang": "-6.921840",
   "bujur": "107.607120",
-  "radius_m": "50",
+  "radius_m": "250",
   "aktif": "true"
 }
 ```
@@ -715,7 +773,7 @@ dinonaktifkan masih bisa masuk hari itu juga.
 - `lintang` (−90…90) dan `bujur` (−180…180) wajib berupa angka. Tanpa titik
   kantor, server tidak punya pembanding untuk menghitung jarak. `PUT` tetap
   boleh parsial, tetapi kalau salah satu dikirim, keduanya harus sah.
-- `radius_m` antara 1 dan 5000 meter; kalau tidak dikirim, pakai 50. Nilai ini
+- `radius_m` antara 1 dan 5000 meter; kalau tidak dikirim, pakai 250. Nilai ini
   tidak menolak absen dinas luar; hanya menandai seberapa jauh titik itu dari
   area kantor.
 - `aktif` datang sebagai teks `"true"`/`"false"`, karena isian formulir selalu
@@ -829,10 +887,32 @@ Bentuk kuota selalu begini:
 menampilkan ketiganya berdampingan, dan angka yang tidak bisa dijumlahkan
 sendiri oleh pembacanya akan terlihat seperti salah hitung.
 
+Kuota dihitung **per tahun kalender**, termasuk tahun mendatang, mulai dari
+1 Januari tahun tersebut atau `masuk_kerja` orang itu (mana yang lebih akhir),
+sampai 31 Desember secara inklusif. Cuti lintas tahun dibagi ke tahun
+masing-masing, bukan dipotong hanya ke tahun berjalan. Saat mengajukan maupun
+menyetujui cuti, jatah wajib diperiksa untuk **setiap tahun yang disentuh**
+rentangnya; kekurangan jatah pada salah satu tahun tetap ditolak `422`.
+`GET /saya/izin` hanya menampilkan kuota tahun berjalan. Perhitungan internal
+menerima tahun eksplisit; tanpa tahun (atau `null`), gunakan tahun berjalan.
+
+`terpakai` menghitung tanggal kerja unik dari cuti `disetujui`; tanggal yang
+sudah punya absen **`masuk` milik orang itu** tidak memotong jatah, sesuai
+prioritas hadir di laporan. Absen `pulang` saja tidak menghapus pemakaian cuti.
+`menunggu` mencadangkan tanggal kerja unik dari cuti yang masih menunggu,
+tetap dihitung meskipun sudah ada absen. Cuti `ditolak`, izin, dan sakit tidak
+memotong atau mencadangkan jatah.
+
 #### `GET /admin/izin?status=menunggu`
 
-`status` berisi `menunggu` · `disetujui` · `ditolak` · `semua`. Tanpa parameter,
-anggap `menunggu`.
+`status` wajib berupa teks `menunggu` · `disetujui` · `ditolak` · `semua`.
+Default `menunggu` hanya berlaku jika parameter tidak dikirim. Jika dikirim
+sebagai array, nilai kosong, atau teks lain, balas `422` dengan
+`kode: "status_tidak_valid"` dan
+`message: "Status harus menunggu, disetujui, ditolak, atau semua."`.
+
+Hanya untuk admin; token tidak ada/tidak valid → `401` (`sesi_habis`),
+peran magang → `403` (`tidak_berhak`).
 
 ```json
 {
@@ -860,9 +940,9 @@ anggap `menunggu`.
   Angka itulah yang dipakai tab di layar. Tab yang menghitung sendiri dari
   daftar tersaring akan selalu menulis `0` untuk status yang tidak sedang dibuka,
   dan terlihat seperti tidak ada pengajuan sama sekali.
-- Urutkan terbaru di atas (`diajukan` menurun). Admin membuka layar ini untuk
-  memutuskan, bukan membaca arsip dari awal.
-- **Nama dan divisi diambil dari tabel pengguna lewat join**, bukan dari
+- Urutkan terbaru di atas (`diajukan` menurun, lalu `id` menurun jika waktunya
+  sama). Admin membuka layar ini untuk memutuskan, bukan membaca arsip dari awal.
+- **Nama, NIP, dan divisi diambil dari tabel pengguna lewat relasi**, bukan dari
   salinan di baris pengajuannya. Perbaikan ejaan nama harus langsung terlihat di
   semua layar. Salinan di baris pengajuan boleh tetap disimpan sebagai riwayat,
   tapi jangan pernah dipakai untuk ditampilkan.
@@ -876,25 +956,48 @@ anggap `menunggu`.
 { "catatan": "Beban kerja sedang tinggi pada tanggal itu." }
 ```
 
+Hanya untuk admin; token tidak ada/tidak valid → `401` (`sesi_habis`),
+peran magang → `403` (`tidak_berhak`), termasuk untuk pengajuannya sendiri.
+Berhasil → `200` dengan satu baris izin, bentuk yang sama seperti item
+`GET /admin/izin` di atas (tanpa pembungkus atau kolom baru).
+
+Kode galat keputusan (selalu disertai `message` Bahasa Indonesia):
+
+| `kode` | Status | Arti |
+|---|---|---|
+| `tidak_ditemukan` | `404` | Pengajuan dengan id tersebut tidak ada |
+| `sudah_diputuskan` | `409` | Status bukan lagi `menunggu`; keputusan sebelumnya tidak diubah |
+| `rentang_tidak_sah` | `422` | Rentang sudah lewat, terbalik, atau tidak lagi memuat hari kerja pada hari ini maupun setelahnya |
+| `bentrok_izin` | `409` | Ada pengajuan lain milik orang yang sama yang **disetujui** dan tumpang tindih, termasuk tanggal batas dan rentang satu hari |
+| `kuota_tidak_cukup` | `422` | Sisa cuti tidak cukup pada salah satu tahun kalender yang disentuh; pesan menyebut nama, sisa dan jumlah hari yang diajukan pada tahun itu |
+
 Yang wajib ada di server, bukan cuma di layar:
 
-- **`404`** kalau id-nya tidak ada.
-- **`409`** kalau pengajuannya sudah diputuskan. Menekan Setujui dua kali tidak
-  boleh mencatat keputusan kedua di atas yang pertama — setelah itu tidak ada
-  cara tahu mana yang berlaku.
-- **`422`** kalau `tolak` tanpa `catatan` yang berarti (minimal 4 karakter).
-  Alasannya dibaca magang di layar Izin & Cuti; penolakan tanpa alasan akan
-  ditanyakan lewat pesan pribadi, dan jawabannya tidak tercatat di mana pun.
-- Saat **menyetujui**, periksa ulang jatahnya (`422`, sebut sisa dan jumlah
-  yang diajukan) dan pastikan tidak ada pengajuan lain yang **sudah disetujui**
-  pada tanggal yang tumpang tindih (`409`). Bisa ada dua pengajuan yang
-  masing-masing muat tapi jumlahnya melebihi jatah kalau keduanya disetujui.
-  Kalau pemeriksaannya cuma di sisi magang, yang tahu masalahnya justru bukan
-  yang bisa memutuskan.
-- Periksa ulang juga bahwa rentangnya masih memuat hari kerja (`422`).
-  Pengajuan yang disetujui setelah seluruh tanggalnya lewat tidak mengurangi
-  apa pun dan tidak boleh tercatat sebagai cuti terpakai.
-- Isi `diputuskan`, dan `catatan_admin` (untuk `setujui` boleh `null`).
+- Id rute harus berupa angka; id dengan format tidak sah ditolak `404`, bukan `500`.
+- Keputusan hanya sekali dari status `menunggu`, baik pengulangan keputusan
+  yang sama maupun pergantian setujui/tolak; tidak boleh menambah audit kedua.
+- Untuk `tolak`, `catatan` wajib berupa teks yang di-trim sebelum diperiksa
+  panjangnya (4–500 karakter). Kosong, spasi saja, array, dan tipe selain teks
+  ditolak `422` dengan `message` dan `errors.catatan` Bahasa Indonesia, memakai
+  bentuk galat validasi yang sudah ada. Catatan yang tersimpan sudah di-trim.
+- Saat **menyetujui**, periksa ulang jatah dari profil pengguna terbaru untuk
+  **setiap tahun yang disentuh**, dengan mengecualikan pengajuan ini dari
+  cadangan `menunggu`. Hanya `cuti` memeriksa jatah; `izin` dan `sakit` tidak.
+- Bentrok hanya terhadap izin **disetujui** milik pemohon yang sama, bukan
+  izin menunggu/ditolak atau milik orang lain. Bandingkan tanggal secara inklusif.
+- Periksa ulang hari kerja memakai kalender libur terbaru. Rentang yang masih
+  berakhir hari ini atau kemudian tetapi hanya menyisakan hari libur juga
+  ditolak `rentang_tidak_sah`. Penolakan tidak perlu lolos pemeriksaan
+  rentang, bentrok, atau jatah tersebut.
+- Isi `diputuskan` dengan jam server, simpan admin pemutus dari token, dan
+  `catatan_admin` (`null` untuk `setujui`). Abaikan metadata keputusan/pemilik
+  kiriman klien.
+- Kunci pengguna pemohon terlebih dahulu, lalu baca ulang dan kunci izin,
+  sejalan dengan urutan kunci pengajuan. Gunakan kuota dari pengguna terkunci.
+- Keputusan dan audit `setujui_izin`/`tolak_izin` harus disimpan dalam **satu
+  transaksi**; kegagalan audit membatalkan keputusan. Audit mencatat admin,
+  waktu, IP, user agent, serta `izin_id`, `pengguna_id`, `jenis`, `mulai`, dan
+  `selesai`, bukan PIN, hash, token, atau seluruh body permintaan.
 
 #### `GET /saya/izin`
 
@@ -931,6 +1034,22 @@ tempat magang bisa membaca kenapa pengajuannya ditolak.
 | tidak ada pengajuan lain yang tumpang tindih | `409` | **termasuk yang masih `menunggu`** |
 | jatah cukup, kalau `jenis` = `cuti` | `422` | sebut sisa dan jumlah yang diajukan |
 
+Kode galat untuk pengajuan ini (selalu disertai `message` Bahasa Indonesia):
+
+| `kode` | Status | Arti |
+|---|---|---|
+| `tanggal_lewat` | `422` | Seluruh tanggal pengajuan sudah lewat |
+| `tanpa_hari_kerja` | `422` | Rentang tidak memuat hari kerja |
+| `bentrok_absen` | `409` | Ada catatan absen milik pengguna pada hari kerja yang diajukan, baik `masuk` maupun `pulang` |
+| `bentrok_izin` | `409` | Ada pengajuan milik pengguna berstatus `menunggu` atau `disetujui` yang tumpang tindih, termasuk tanggal batas |
+| `kuota_tidak_cukup` | `422` | Sisa cuti tidak cukup pada salah satu tahun kalender yang disentuh; pesan menyebut sisa dan jumlah hari yang diajukan pada tahun itu |
+
+Validasi kolom mengembalikan `422` dengan `message` dan `errors` Bahasa Indonesia.
+Keempat kolom wajib berupa teks; tanggal harus sah, dan `alasan` di-trim sebelum
+diperiksa panjangnya (4–500 karakter). Pemilik diambil dari token, bukan
+`pengguna_id` kiriman klien; status awal selalu `menunggu` dan waktu pengajuan
+diisi server.
+
 **Yang diperiksa `selesai`, bukan `mulai`.** Sakit biasanya baru dilaporkan
 setelah sembuh. Memeriksa `mulai` membuat laporan sakit sehari terlambat selalu
 ditolak, dan magang akan menyerah lalu tidak melapor sama sekali. Yang tidak
@@ -952,6 +1071,11 @@ Balasan `201`: baris barunya, ditambah `hari_kerja`.
 ### Riwayat absen magang
 
 #### `GET /saya/absen?bulan=2026-10`
+
+Parameter `bulan` opsional; jika tidak dikirim, gunakan bulan berjalan.
+Jika dikirim, nilainya wajib berbentuk `YYYY-MM` dengan bulan `01`–`12`.
+Nilai yang tidak valid menghasilkan status `422` dengan `kode: "bulan_tidak_valid"`
+dan `message: "Bulan harus berbentuk YYYY-MM."`.
 
 ```json
 {
@@ -1018,10 +1142,11 @@ absen, karena itu yang benar-benar terjadi. Persis di bawah absen ada izin,
 supaya magang yang lupa absen tapi sudah punya izin disetujui tidak dicap
 alpha.
 
-Konsekuensi yang paling gampang terlewat: **kuota cuti hanya boleh dihitung dari
-hari yang benar-benar berstatus `cuti`**, bukan dari pengajuan yang disetujui.
-Pengajuan yang disetujui untuk hari yang ternyata ada absennya tidak memotong
-jatah.
+Konsekuensi yang paling gampang terlewat: **cuti terpakai hanya boleh dihitung
+dari hari yang benar-benar berstatus `cuti`**, bukan sekadar dari pengajuan yang
+disetujui. Pengajuan yang disetujui untuk hari yang ternyata ada absen `masuk`
+milik orang itu tidak memotong jatah. Cadangan `menunggu` tetap dihitung sesuai
+aturan kuota di bagian Izin & cuti.
 
 ### Keamanan akun sendiri
 
@@ -1068,7 +1193,8 @@ sendiri.
     {
       "pengguna_id": 7, "nip": "MGG006", "nama": "Agus Firmansyah",
       "divisi": "Management Data", "nik": "3271012345670006",
-      "shift": "Reguler", "aktif": true, "hari_kerja": 13,
+      "shift": "Reguler", "lokasi": "Kantor Pusat", "masuk_kerja": "2026-01-05",
+      "aktif": true, "hari_kerja": 13,
       "hadir": 12, "telat": 2, "telat_menit": 52,
       "izin": 0, "cuti": 0, "sakit": 1, "alpha": 0,
       "luar": 3, "luar_kasar": 1
@@ -1079,6 +1205,22 @@ sendiri.
 
 - `hadir` = `tepat` + `telat`. `izin`, `cuti`, dan `sakit` dikirim **terpisah**
   dan tidak digabung, supaya masih bisa ditelusuri saat angkanya dipertanyakan.
+- `lokasi` dan `masuk_kerja` dipakai ekspor CSV: nama ruangan di kepala laporan
+  dan batas hari yang tidak dihitung untuk orang yang belum bergabung.
+- Tambahkan `&rinci=1` untuk ekspor CSV. Dengan parameter itu setiap baris
+  mendapat `harian`, berisi satu entri per tanggal di bulan tersebut:
+
+  ```json
+  "harian": [
+    { "tanggal": "2026-10-01", "status": "tepat", "keterangan_libur": null },
+    { "tanggal": "2026-10-04", "status": "libur", "keterangan_libur": "Hari Minggu" }
+  ]
+  ```
+
+  `status` sama dengan rincian harian: `tepat`, `telat`, `izin`, `cuti`,
+  `sakit`, `alpha`, `libur`, `belum`. Hanya tiga kolom itu yang dikirim —
+  jangan sertakan foto, titik GPS, atau alamat di balasan bulanan. Tanpa
+  `rinci=1`, `harian` tidak ada dan balasannya tetap ringan.
 - `hari_kerja` di akar response = jumlah hari kerja **di bulan itu** (13 untuk
   Oktober sampai tanggal 19). Itu **bukan** penyebut kartu "Kehadiran" di layar:
   kartu itu menjumlahkan `hari_kerja` tiap baris, karena `hadir` juga
@@ -1123,9 +1265,30 @@ memastikan itu: satu fungsi yang dipakai dua endpoint.
 
 ### Ekspor CSV
 
-**Tidak perlu endpoint.** Berkasnya disusun di browser dari balasan
-`GET /admin/laporan`, lalu diunduh lewat `Blob`. Dari sisi backend tidak ada
-yang perlu ditambahkan.
+**Tidak perlu endpoint baru.** Berkasnya disusun di browser dari
+`GET /admin/laporan?bulan=…&rinci=1`, lalu diunduh lewat `Blob`. Backend hanya
+perlu menyediakan `harian` seperti di atas.
+
+Bentuknya matriks kehadiran, bukan tabel ringkasan:
+
+```
+Room;Kantor Pusat
+Instructor Name;Nama Admin
+Subject;All divisions
+Month;October
+Year;2026
+
+NIP;Student Name;Division;Thu 1;Fri 2;…;Sat 31;P;T;E;U
+MGG001;Siti Rahayu;Pendataan;P;T;L;…;E;18;2;3;1
+
+Legend;P = Present, T = Tardy, U = Unexcused, E = Excused, L = Holiday, blank = no record.
+```
+
+Satu kolom per tanggal, dengan nama hari di depan angka. Sel yang tidak punya
+catatan — tanggal setelah hari ini atau sebelum `masuk_kerja` — dibiarkan
+kosong, bukan ditandai alpha. Sabtu, Minggu, dan hari libur ditandai `L`.
+Izin, cuti, dan sakit sama-sama menjadi `E`, karena di lembar absensi ketiganya
+berarti "tidak masuk dengan izin".
 
 Kalau nanti ada yang bertanya kenapa berkasnya terlihat aneh di Excel:
 pemisahnya **titik koma**, dan isinya diawali BOM UTF-8. Excel di komputer
@@ -1134,17 +1297,81 @@ koma membuka seluruh isinya di satu kolom.
 
 ### Yang belum ada, dan sengaja dibiarkan begitu
 
-`GET /admin/anomali` — absen mencurigakan: `ip`, `tanpa_foto`, `pin_salah_berulang`.
-Tidak ada layar yang memakainya, jadi endpoint-nya belum wajib. Kalau kamu
-membuatnya, sertakan juga absen yang `lokasi_meragukan`, jarak yang tidak wajar,
-dan perpindahan yang mustahil dalam waktu singkat.
-
 `jarak_m` sekarang **ada** dan dihitung server dengan Haversine saat absen
 (lihat `POST /kiosk/absen`). Angka itu disimpan di baris absen, bukan dihitung
 ulang saat laporan dibuka: mengubah titik kantor besok tidak boleh mengubah
 jarak absen kemarin. Koordinat dan `akurasi` tetap ditampilkan sebagai
 perkiraan, bukan bukti — itu sebabnya admin melihat "± N m" dan tautan peta,
 bukan satu tuduhan otomatis.
+
+### Log audit
+
+#### `GET /admin/audit?dari=2026-10-01&sampai=2026-10-07&aksi=tambah_magang&halaman=1&per=50`
+
+Admin saja. Menampilkan audit terbaru lebih dulu. Rentang maksimal 90 hari;
+bawaan 30 hari terakhir. `per` 1–100, bawaan 50.
+
+```json
+{
+  "data": [
+    {
+      "id": 120,
+      "waktu": "2026-10-07T09:15:00+07:00",
+      "aksi": "tambah_magang",
+      "pengguna_id": 1,
+      "aktor": { "nama": "Administrator", "nip": "ADM001" },
+      "rincian": { "pengguna_id": 7, "nip": "MGG002" },
+      "ip": "10.0.0.5",
+      "user_agent": "Mozilla/5.0"
+    }
+  ],
+  "meta": { "halaman": 1, "per": 50, "total": 1, "terakhir": 1 }
+}
+```
+
+Tidak ada endpoint mengubah atau menghapus audit. PIN, token, `pin_hash`, dan
+isi foto tidak boleh muncul di `rincian`.
+
+### Anomali
+
+#### `GET /admin/anomali?dari=2026-10-01&sampai=2026-10-07`
+
+Admin saja. Rentang maksimal 31 hari; bawaan 7 hari terakhir. Semua tanggal
+memakai `Asia/Jakarta`.
+
+```json
+{
+  "dari": "2026-10-01",
+  "sampai": "2026-10-07",
+  "data": [
+    {
+      "jenis": "pin_salah_berulang",
+      "tingkat": "tinggi",
+      "judul": "PIN salah berulang",
+      "keterangan": "5 percobaan gagal untuk NIP MGG002 dalam 10 menit.",
+      "absen_id": null,
+      "pengguna_id": 7,
+      "nama": "Siti Rahayu",
+      "nip": "MGG002",
+      "waktu": "2026-10-07T08:12:00+07:00"
+    }
+  ]
+}
+```
+
+Jenis yang wajib ada:
+
+| `jenis` | `tingkat` | Arti |
+|---|---|---|
+| `pin_salah_berulang` | `tinggi` | ≥5 percobaan masuk gagal untuk NIP yang sama dalam 10 menit. |
+| `lokasi_meragukan` | `sedang` | Absen `luar` dengan `lokasi_meragukan` atau akurasi >50 m. |
+| `jarak_jauh` | `rendah` | Absen `luar` dengan `jarak_m` > 100 km. Bukan tuduhan; dinas luar boleh jauh. |
+| `perpindahan_mustahil` | `tinggi` | Dua absen berkoordinat menunjukkan kecepatan >900 km/jam dan jarak ≥5 km. |
+| `ip_di_luar_kantor` | `rendah` | Hanya muncul kalau `ABSEN_IP_KANTOR` diisi dan IP absen tidak ada di daftar. |
+| `foto_hilang` | `sedang` | Baris absen tidak punya `foto_path` (data lama atau berkas hilang). |
+
+Anomali adalah petunjuk untuk diperiksa, bukan keputusan otomatis. Tidak ada
+endpoint untuk mengubah atau menghapus anomali.
 
 ---
 

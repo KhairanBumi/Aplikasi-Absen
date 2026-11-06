@@ -2,8 +2,11 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\Absen;
 use App\Models\Audit;
+use App\Models\HariLibur;
 use App\Models\Lokasi;
+use App\Models\Pengguna;
 use App\Models\Shift;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -47,7 +50,7 @@ class AdminDataController extends Controller
             'alamat' => $data['alamat'] ?? null,
             'lintang' => $data['lintang'],
             'bujur' => $data['bujur'],
-            'radius_m' => $data['radius_m'] ?? 50,
+            'radius_m' => $data['radius_m'] ?? config('absensi.seed.lokasi_radius_m', 250),
             'aktif' => $data['aktif'] ?? true,
         ]);
 
@@ -111,17 +114,320 @@ class AdminDataController extends Controller
         $data = Shift::withCount(['magang as jumlah_magang'])
             ->orderBy('nama')
             ->get()
-            ->map(fn (Shift $s) => [
-                'id' => $s->id,
-                'nama' => $s->nama,
-                'masuk' => substr((string) $s->masuk, 0, 5),
-                'pulang' => substr((string) $s->pulang, 0, 5),
-                'toleransi_menit' => $s->toleransi_menit,
-                'aktif' => $s->aktif,
-                'jumlah_magang' => $s->jumlah_magang,
-            ]);
+            ->map(fn (Shift $s) => $this->shiftArray($s));
 
         return response()->json(['data' => $data]);
+    }
+
+    public function storeShift(Request $request): JsonResponse
+    {
+        $this->normalisasiShift($request);
+
+        $data = $request->validate([
+            'nama' => ['required', 'string', 'max:80'],
+            'masuk' => ['required', 'regex:/^([01]\d|2[0-3]):[0-5]\d$/'],
+            'pulang' => ['required', 'regex:/^([01]\d|2[0-3]):[0-5]\d$/'],
+            'toleransi_menit' => ['nullable', 'integer', 'between:0,120'],
+            'aktif' => ['nullable', 'boolean'],
+        ], $this->pesanShift());
+
+        if ($this->namaShiftDipakai($data['nama'])) {
+            return $this->galat(
+                "Shift \"{$data['nama']}\" sudah ada.",
+                409,
+                'nama_dipakai'
+            );
+        }
+
+        $shift = Shift::create([
+            'nama' => $data['nama'],
+            'masuk' => $data['masuk'],
+            'pulang' => $data['pulang'],
+            'toleransi_menit' => $data['toleransi_menit'] ?? 0,
+            'aktif' => $data['aktif'] ?? true,
+        ]);
+
+        Audit::catat(
+            $request->attributes->get('pengguna')->id,
+            'tambah_shift',
+            ['shift_id' => $shift->id, 'nama' => $shift->nama],
+            $request
+        );
+
+        return response()->json(
+            $this->shiftArray($shift->loadCount(['magang as jumlah_magang'])),
+            201
+        );
+    }
+
+    public function updateShift(Request $request, int $id): JsonResponse
+    {
+        $shift = Shift::find($id);
+
+        if (! $shift) {
+            return $this->galat('Shift tidak ditemukan.', 404, 'tidak_ditemukan');
+        }
+
+        $this->normalisasiShift($request);
+
+        $data = $request->validate([
+            'nama' => ['sometimes', 'required', 'string', 'max:80'],
+            'masuk' => ['sometimes', 'required', 'regex:/^([01]\d|2[0-3]):[0-5]\d$/'],
+            'pulang' => ['sometimes', 'required', 'regex:/^([01]\d|2[0-3]):[0-5]\d$/'],
+            'toleransi_menit' => ['sometimes', 'integer', 'between:0,120'],
+            'aktif' => ['sometimes', 'boolean'],
+        ], $this->pesanShift());
+
+        if (array_key_exists('nama', $data) && $this->namaShiftDipakai($data['nama'], $shift->id)) {
+            return $this->galat(
+                "Shift \"{$data['nama']}\" sudah ada.",
+                409,
+                'nama_dipakai'
+            );
+        }
+
+        $shift->fill($data)->save();
+
+        Audit::catat(
+            $request->attributes->get('pengguna')->id,
+            'ubah_shift',
+            ['shift_id' => $shift->id, 'nama' => $shift->nama],
+            $request
+        );
+
+        return response()->json(
+            $this->shiftArray($shift->fresh()->loadCount(['magang as jumlah_magang']))
+        );
+    }
+
+    public function hapusShift(Request $request, int $id): JsonResponse
+    {
+        $shift = Shift::find($id);
+
+        if (! $shift) {
+            return $this->galat('Shift tidak ditemukan.', 404, 'tidak_ditemukan');
+        }
+
+        if (Shift::count() <= 1) {
+            return $this->galat(
+                'Ini satu-satunya shift. Tanpa shift, tidak ada yang bisa dipilih saat menambah anak magang.',
+                409,
+                'shift_terakhir'
+            );
+        }
+
+        $jumlahPengguna = Pengguna::where('shift_id', $shift->id)->count();
+
+        if ($jumlahPengguna > 0) {
+            return $this->galat(
+                "Shift ini masih dipakai {$jumlahPengguna} orang. Pindahkan mereka ke shift lain dulu, atau nonaktifkan shift ini.",
+                409,
+                'shift_dipakai_pengguna'
+            );
+        }
+
+        $jumlahAbsen = Absen::where('shift_id', $shift->id)->count();
+
+        if ($jumlahAbsen > 0) {
+            return $this->galat(
+                "Shift ini dipakai {$jumlahAbsen} catatan absen. Menghapusnya membuat riwayat itu kehilangan jam kerjanya — nonaktifkan saja.",
+                409,
+                'shift_dipakai_absen'
+            );
+        }
+
+        Audit::catat(
+            $request->attributes->get('pengguna')->id,
+            'hapus_shift',
+            ['shift_id' => $shift->id, 'nama' => $shift->nama],
+            $request
+        );
+
+        $shift->delete();
+
+        return response()->json(['ok' => true]);
+    }
+
+    public function hariLibur(): JsonResponse
+    {
+        $data = HariLibur::orderBy('tanggal')
+            ->get()
+            ->map(fn (HariLibur $h) => $this->hariLiburArray($h));
+
+        return response()->json(['data' => $data]);
+    }
+
+    public function storeHariLibur(Request $request): JsonResponse
+    {
+        $this->normalisasiHariLibur($request);
+
+        $data = $request->validate([
+            'tanggal' => ['required', 'date_format:Y-m-d'],
+            'keterangan' => ['required', 'string', 'max:120'],
+        ], $this->pesanHariLibur());
+
+        if (HariLibur::whereDate('tanggal', $data['tanggal'])->exists()) {
+            return $this->galat(
+                "Tanggal {$data['tanggal']} sudah terdaftar sebagai hari libur.",
+                409,
+                'tanggal_dipakai'
+            );
+        }
+
+        $hariLibur = HariLibur::create([
+            'tanggal' => $data['tanggal'],
+            'keterangan' => $data['keterangan'],
+        ]);
+
+        Audit::catat(
+            $request->attributes->get('pengguna')->id,
+            'tambah_hari_libur',
+            ['hari_libur_id' => $hariLibur->id, 'tanggal' => $data['tanggal']],
+            $request
+        );
+
+        return response()->json($this->hariLiburArray($hariLibur), 201);
+    }
+
+    public function updateHariLibur(Request $request, int $id): JsonResponse
+    {
+        $hariLibur = HariLibur::find($id);
+
+        if (! $hariLibur) {
+            return $this->galat('Hari libur tidak ditemukan.', 404, 'tidak_ditemukan');
+        }
+
+        $this->normalisasiHariLibur($request);
+
+        $data = $request->validate([
+            'tanggal' => ['sometimes', 'required', 'date_format:Y-m-d'],
+            'keterangan' => ['sometimes', 'required', 'string', 'max:120'],
+        ], $this->pesanHariLibur());
+
+        if (array_key_exists('tanggal', $data)) {
+            $dipakai = HariLibur::whereDate('tanggal', $data['tanggal'])
+                ->where('id', '!=', $hariLibur->id)
+                ->exists();
+
+            if ($dipakai) {
+                return $this->galat(
+                    "Tanggal {$data['tanggal']} sudah terdaftar sebagai hari libur.",
+                    409,
+                    'tanggal_dipakai'
+                );
+            }
+        }
+
+        $hariLibur->fill($data)->save();
+
+        Audit::catat(
+            $request->attributes->get('pengguna')->id,
+            'ubah_hari_libur',
+            ['hari_libur_id' => $hariLibur->id, 'tanggal' => $hariLibur->tanggal->format('Y-m-d')],
+            $request
+        );
+
+        return response()->json($this->hariLiburArray($hariLibur->fresh()));
+    }
+
+    public function hapusHariLibur(Request $request, int $id): JsonResponse
+    {
+        $hariLibur = HariLibur::find($id);
+
+        if (! $hariLibur) {
+            return $this->galat('Hari libur tidak ditemukan.', 404, 'tidak_ditemukan');
+        }
+
+        Audit::catat(
+            $request->attributes->get('pengguna')->id,
+            'hapus_hari_libur',
+            ['hari_libur_id' => $hariLibur->id, 'tanggal' => $hariLibur->tanggal->format('Y-m-d')],
+            $request
+        );
+
+        $hariLibur->delete();
+
+        return response()->json(['ok' => true]);
+    }
+
+    private function shiftArray(Shift $shift): array
+    {
+        return [
+            'id' => $shift->id,
+            'nama' => $shift->nama,
+            'masuk' => substr((string) $shift->masuk, 0, 5),
+            'pulang' => substr((string) $shift->pulang, 0, 5),
+            'toleransi_menit' => $shift->toleransi_menit,
+            'aktif' => $shift->aktif,
+            'jumlah_magang' => $shift->jumlah_magang ?? 0,
+        ];
+    }
+
+    private function normalisasiShift(Request $request): void
+    {
+        if ($request->exists('nama')) {
+            $request->merge(['nama' => trim((string) $request->input('nama'))]);
+        }
+
+        if ($request->exists('aktif')) {
+            $nilai = filter_var($request->input('aktif'), FILTER_VALIDATE_BOOLEAN, FILTER_NULL_ON_FAILURE);
+
+            if ($nilai !== null) {
+                $request->merge(['aktif' => $nilai]);
+            }
+        }
+    }
+
+    private function namaShiftDipakai(string $nama, ?int $kecuali = null): bool
+    {
+        $query = Shift::whereRaw('LOWER(nama) = ?', [mb_strtolower(trim($nama))]);
+
+        if ($kecuali) {
+            $query->where('id', '!=', $kecuali);
+        }
+
+        return $query->exists();
+    }
+
+    private function pesanShift(): array
+    {
+        return [
+            'nama.required' => 'Nama shift wajib diisi.',
+            'nama.max' => 'Nama shift maksimal 80 karakter.',
+            'masuk.required' => 'Jam masuk wajib diisi.',
+            'masuk.regex' => 'Jam masuk harus berbentuk HH:MM (24 jam).',
+            'pulang.required' => 'Jam pulang wajib diisi.',
+            'pulang.regex' => 'Jam pulang harus berbentuk HH:MM (24 jam).',
+            'toleransi_menit.integer' => 'Toleransi harus berupa angka bulat.',
+            'toleransi_menit.between' => 'Toleransi harus antara 0 dan 120 menit.',
+            'aktif.boolean' => 'Status aktif tidak sah.',
+        ];
+    }
+
+    private function hariLiburArray(HariLibur $hariLibur): array
+    {
+        return [
+            'id' => $hariLibur->id,
+            'tanggal' => $hariLibur->tanggal->format('Y-m-d'),
+            'keterangan' => $hariLibur->keterangan,
+        ];
+    }
+
+    private function normalisasiHariLibur(Request $request): void
+    {
+        if ($request->exists('keterangan')) {
+            $request->merge(['keterangan' => trim((string) $request->input('keterangan'))]);
+        }
+    }
+
+    private function pesanHariLibur(): array
+    {
+        return [
+            'tanggal.required' => 'Tanggal wajib diisi.',
+            'tanggal.date_format' => 'Tanggal harus berbentuk YYYY-MM-DD.',
+            'keterangan.required' => 'Keterangan wajib diisi.',
+            'keterangan.max' => 'Keterangan maksimal 120 karakter.',
+        ];
     }
 
     private function lokasiArray(Lokasi $lokasi): array

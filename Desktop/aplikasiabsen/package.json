@@ -7,11 +7,17 @@
     "dev": "vite",
     "build": "vite build && node scripts/periksa-build.mjs",
     "periksa:build": "node scripts/periksa-build.mjs",
+    "test": "vitest run",
+    "uji:beban": "node scripts/uji-beban.mjs",
     "preview": "vite preview"
   },
   "devDependencies": {
     "@tailwindcss/vite": "^4.3.3",
     "tailwindcss": "^4.3.3",
-    "vite": "^8.3.4"
+    "vite": "^8.3.4",
+    "vitest": "^5.0.5"
+  },
+  "dependencies": {
+    "motion": "^14.7.1"
   }
 }

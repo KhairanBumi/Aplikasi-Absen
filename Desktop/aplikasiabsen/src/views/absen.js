@@ -9,19 +9,13 @@
 import { api, pengguna, idPerangkat } from '../api.js';
 import { esc, jam, jamBerjalan, tampilkanGalat, sembunyikanGalat, KELAS_ISIAN } from '../ui.js';
 import { formatJarak } from '../tabel.js';
+import { pop, coretJalur } from '../animasi.js';
 import * as kamera from '../kamera.js';
-import { ambilLokasi, AKURASI_MAKS } from '../lokasi.js';
+import { ambilLokasi, jarakMeter, AKURASI_MAKS } from '../lokasi.js';
 
 const JEDA_HASIL = 7000; // ms sebelum kembali ke layar awal
 const JEDA_DIAM = 45000; // ms tanpa ketikan sebelum kolom dikosongkan
 const MULAI_HITUNG = 3;
-
-const IKON_MEREK = `
-  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"
-       stroke-linecap="round" stroke-linejoin="round" class="size-5" aria-hidden="true">
-    <circle cx="12" cy="12" r="8.6" />
-    <path d="M12 7.2V12l3.1 1.9" />
-  </svg>`;
 
 const IKON_LOKASI = `
   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"
@@ -72,10 +66,10 @@ const IKON_MUTAR_KECIL = `
 
 // Kolom isian kiosk: sama seperti di layar masuk, tapi lebih tinggi dan
 // berhuruf besar karena dibaca dari jarak satu langkah dari layar.
-const ISIAN = `${KELAS_ISIAN} py-4 text-center text-xl`;
+const ISIAN = `${KELAS_ISIAN} py-3 text-center text-lg sm:py-4 sm:text-xl`;
 
 const TOMBOL =
-  'flex w-full cursor-pointer items-center justify-center gap-2 rounded-full bg-merek px-5 py-4 ' +
+  'flex min-h-12 w-full cursor-pointer items-center justify-center gap-2 rounded-full bg-merek px-5 py-3.5 ' +
   'font-medium text-white shadow-naik transition duration-200 ease-apple hover:bg-merek-gelap ' +
   'active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-55';
 
@@ -83,6 +77,14 @@ const TOMBOL_ULANG =
   'mx-auto mt-6 flex cursor-pointer items-center gap-2 rounded-full border border-ink/12 ' +
   'bg-white/70 px-5 py-2.5 text-sm font-medium text-ink transition duration-200 ease-apple ' +
   'hover:bg-white active:scale-[0.97]';
+
+// Satu kunci per percobaan absen, dipakai ulang oleh semua pengiriman ulang.
+// Server memakai kunci ini untuk mengenali replay, jadi absen yang sebenarnya
+// sudah tercatat tidak menjadi baris kedua saat jawabannya hilang di jaringan.
+function kunciBaru() {
+  return crypto.randomUUID?.()
+    ?? `kiosk-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+}
 
 export default {
   judul: 'Kiosk Absen',
@@ -98,6 +100,19 @@ export default {
     let gpsPesan = '';
     let janjiGps = null;
     let gpsUrutan = 0;
+
+    // Pilihan mode bawaan boleh diberi saran berdasarkan jarak, tetapi begitu
+    // orang menekan pilihan sendiri, saran itu tidak boleh menimpanya.
+    let modeDisentuh = false;
+
+    // Perangkat tanpa layanan lokasi tetap boleh absen di luar. Pilihan ini
+    // hanya berlaku setelah GPS gagal, dan rekap menandainya sebagai lokasi
+    // tidak tersedia.
+    let tanpaLokasi = false;
+
+    // Diisi kalau server menolak perangkat. Disimpan di tingkat layar supaya
+    // peringatannya tetap ada saat formulir dibangun ulang setelah hasil absen.
+    let perangkatGalat = null;
 
     // Semua timer lewat satu jalur supaya tidak ada yang tertinggal hidup saat
     // layar ditinggalkan. Timer yang bocor bisa mengubah layar lain.
@@ -132,24 +147,23 @@ export default {
     // beranda, jadi mengirimnya ke sana cuma satu lompatan tambahan.
     const tautanKembali = pengguna()
       ? `<a href="${pengguna().peran === 'magang' ? '#/riwayat' : '#/beranda'}"
-            class="kaca flex items-center gap-1.5 rounded-full px-3.5 py-2 text-sm font-medium text-ink
+            aria-label="Kembali"
+            class="kaca flex min-h-11 items-center gap-1.5 rounded-full px-3 py-2 text-sm font-medium text-ink
                    transition duration-200 ease-apple hover:bg-white/90 active:scale-[0.97]">
            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9"
                 stroke-linecap="round" stroke-linejoin="round" class="size-4" aria-hidden="true">
              <path d="M14.5 6.5 9 12l5.5 5.5" />
            </svg>
-           Kembali
+           <span class="hidden sm:inline">Kembali</span>
          </a>`
       : '';
 
     akar.innerHTML = `
-      <main class="flex min-h-dvh flex-col px-5 py-6 sm:px-8">
-        <header class="flex shrink-0 items-center justify-between gap-4">
-          <span class="flex items-center gap-2.5">
-            <span class="grid size-9 place-items-center rounded-xl bg-merek text-white shadow-naik">
-              ${IKON_MEREK}
-            </span>
-            <span class="text-sm font-medium text-muted">Aplikasi Absen</span>
+      <main id="isi-utama" tabindex="-1" class="flex min-h-dvh flex-col px-4 py-4 outline-none sm:px-8 sm:py-6">
+        <header class="flex shrink-0 items-center justify-between gap-3">
+          <span class="flex items-center gap-2 rounded-full bg-white/75 p-1 sm:pr-3">
+            <img src="/bpjs-mark.png" alt="" width="128" height="128" class="size-8 shrink-0" />
+            <span class="hidden text-xs font-medium text-ink/70 sm:inline sm:text-sm">Aplikasi Absen</span>
           </span>
 
           <span class="flex shrink-0 items-center gap-2">
@@ -158,18 +172,22 @@ export default {
           </span>
         </header>
 
-        <div class="shrink-0 pt-8 text-center">
-          <p data-jam class="angka-rata text-6xl font-semibold tracking-tight text-ink sm:text-7xl">
+        <div class="shrink-0 pt-3 text-center sm:pt-8">
+          <p data-jam class="angka-rata text-4xl font-semibold tracking-tight text-ink sm:text-6xl lg:text-7xl">
             --.--.--
           </p>
-          <p data-tanggal class="mt-2 text-sm text-muted">—</p>
+          <p data-tanggal class="mt-1.5 inline-flex rounded-full bg-white/60 px-3 py-1 text-[0.7rem] text-ink/70 sm:mt-2 sm:text-sm">—</p>
         </div>
 
-        <div data-panggung class="flex flex-1 flex-col items-center justify-center py-8"></div>
+        <div data-panggung class="flex flex-1 flex-col items-center justify-center py-3 sm:py-8"></div>
 
-        <footer class="shrink-0 text-center text-xs text-muted">
-          Kehadiran hanya tercatat dari perangkat ini.
+        <footer class="shrink-0 text-center">
+          <span class="inline-flex rounded-full bg-white/60 px-3 py-1 text-[0.7rem] text-ink/70 sm:text-xs">
+            Kehadiran hanya tercatat dari perangkat ini.
+          </span>
         </footer>
+
+        <div data-live class="sr-only" aria-live="polite" aria-atomic="true"></div>
       </main>`;
 
     const panggung = akar.querySelector('[data-panggung]');
@@ -189,48 +207,142 @@ export default {
       gpsStatus = 'idle';
       gpsPesan = '';
       janjiGps = null;
+      tanpaLokasi = false;
+    }
+
+    function jarakKeKantor() {
+      if (!gps || !lokasi) return null;
+
+      const lintang = Number(lokasi.lintang);
+      const bujur = Number(lokasi.bujur);
+      if (!Number.isFinite(lintang) || !Number.isFinite(bujur)) return null;
+
+      const radius = Number(lokasi.radius_m) > 0 ? Number(lokasi.radius_m) : 250;
+      const jarak = jarakMeter(gps.lintang, gps.bujur, lintang, bujur);
+
+      return { jarak, radius, diDalam: jarak <= radius };
     }
 
     function gambarGps() {
       const el = panggung.querySelector('[data-gps]');
       if (!el) return;
 
+      const modeLuar = panggung.querySelector('[name="mode"][value="luar"]')?.checked === true;
+
       if (gpsStatus === 'idle') {
-        el.className = 'mt-2 hidden';
-        el.textContent = '';
-        return;
-      }
-
-      el.className = 'mt-2 flex items-center gap-1.5 text-xs';
-
-      if (gpsStatus === 'memuat') {
-        el.classList.add('text-muted');
-        el.innerHTML = `${IKON_MUTAR_KECIL}<span>Mengambil lokasi…</span>`;
-        return;
-      }
-
-      if (gpsStatus === 'siap') {
-        // Di atas 50 m akurasinya sudah kasar. Di atas batas server, absen
-        // "di luar" pasti ditolak; beri tombol ambil ulang sebelum foto diambil.
-        const kasar = gps.akurasi === null || gps.akurasi > 50;
-        const ditolak = gps.akurasi === null || gps.akurasi > AKURASI_MAKS;
-        el.classList.add(ditolak ? 'text-rose-700' : kasar ? 'text-amber-700' : 'text-emerald-700');
-        const angka = gps.akurasi === null ? '?' : gps.akurasi;
-        el.innerHTML = `${IKON_LOKASI}<span>Lokasi terkunci · akurasi ±${angka} m${
-          ditolak ? ' (terlalu kasar untuk dinas luar)' : kasar ? ' (kasar)' : ''
-        }</span>${
-          ditolak
-            ? '<button type="button" class="shrink-0 font-medium underline">Ambil ulang</button>'
-            : ''
-        }`;
+        el.className = 'mt-2 flex flex-wrap items-center gap-x-2 gap-y-1.5 text-xs text-ink/70';
+        el.innerHTML = `<span>Lokasi belum diambil${modeLuar ? ' (dianjurkan)' : ' (opsional)'}.</span>
+          <button type="button"
+                  class="inline-flex min-h-9 items-center rounded-full border border-ink/10 bg-white/70
+                         px-3 font-medium text-ink transition duration-200 ease-apple hover:bg-white
+                         active:scale-[0.97]">Ambil</button>`;
         el.querySelector('button')?.addEventListener('click', () => mulaiGps());
         return;
       }
 
-      el.classList.add('text-rose-700');
-      el.innerHTML = `<span class="flex-1">${esc(gpsPesan)}</span>
-        <button type="button" class="shrink-0 font-medium underline">Coba lagi</button>`;
+      el.className = 'mt-2 flex flex-wrap items-center gap-x-2 gap-y-1.5 text-sm';
+
+      if (gpsStatus === 'memuat') {
+        el.classList.add('text-ink/70');
+        el.innerHTML = `${IKON_MUTAR_KECIL}<span>Mengambil lokasi…</span>`;
+        return;
+      }
+
+      if (gpsStatus === 'siap' && gps) {
+        // Di atas 50 m akurasinya kasar. Di atas AKURASI_MAKS angkanya sangat
+        // kasar, tetapi tetap dicatat: server tidak lagi menolak absen luar
+        // karena akurasi. Tawarkan ambil ulang, jangan menghalangi.
+        const kasar = gps.akurasi === null || gps.akurasi > 50;
+        const sangatKasar = gps.akurasi === null || gps.akurasi > AKURASI_MAKS;
+        const info = jarakKeKantor();
+        const diLuar = Boolean(info && !info.diDalam);
+
+        el.classList.add(sangatKasar ? 'text-amber-900' : diLuar ? 'text-amber-900' : 'text-emerald-800');
+
+        const angka = gps.akurasi === null ? '?' : gps.akurasi;
+        const radius = info
+          ? ` · ${formatJarak(info.jarak)} dari ${lokasi.nama} (${info.diDalam ? 'dalam' : 'di luar'} radius ${info.radius} m)`
+          : '';
+
+        el.innerHTML = `${IKON_LOKASI}<span>Akurasi ±${angka} m${radius}${
+          sangatKasar ? ' (sangat kasar, tetap dicatat)' : kasar ? ' (kasar)' : ''
+        }</span>${
+          kasar
+            ? `<button type="button"
+                       class="inline-flex min-h-9 shrink-0 items-center rounded-full border border-ink/10
+                              bg-white/70 px-3 font-medium text-ink transition duration-200 ease-apple
+                              hover:bg-white active:scale-[0.97]">Ambil ulang</button>`
+            : ''
+        }`;
+
+        if (diLuar && !modeLuar) {
+          el.insertAdjacentHTML(
+            'beforeend',
+            '<span class="basis-full">Anda di luar radius kantor. Pilih "Di luar" bila sedang dinas luar.</span>',
+          );
+        }
+
+        if (modeLuar && sangatKasar) {
+          el.insertAdjacentHTML(
+            'beforeend',
+            '<span class="basis-full">Akurasi kasar tidak menghalangi absen; rekap akan menandainya.</span>',
+          );
+        }
+
+        el.querySelector('button')?.addEventListener('click', () => mulaiGps());
+        return;
+      }
+
+      // Di mode perusahaan lokasi memang keterangan tambahan, jadi kegagalan
+      // GPS tidak boleh tampil sekeras kegagalan di mode dinas luar.
+      el.classList.add(modeLuar ? 'text-rose-800' : 'text-ink/70');
+      el.innerHTML = `<span class="flex-1">${esc(gpsPesan)}${
+        modeLuar ? '' : ' (opsional untuk absen di perusahaan)'
+      }</span>
+        <button type="button"
+                class="inline-flex min-h-9 shrink-0 items-center rounded-full border border-ink/10
+                       bg-white/70 px-3 font-medium text-ink transition duration-200 ease-apple
+                       hover:bg-white active:scale-[0.97]">Coba lagi</button>`;
+
+      if (modeLuar) {
+        el.insertAdjacentHTML(
+          'beforeend',
+          `<label class="flex min-h-11 basis-full cursor-pointer items-center gap-2.5 pt-1">
+             <input type="checkbox" data-tanpa-lokasi ${tanpaLokasi ? 'checked' : ''}
+                    class="size-4 shrink-0 accent-merek" />
+             <span>Lanjut absen di luar tanpa koordinat. Rekap akan menandai lokasi tidak tersedia.</span>
+           </label>`,
+        );
+
+        el.querySelector('[data-tanpa-lokasi]')?.addEventListener('change', (e) => {
+          tanpaLokasi = e.currentTarget.checked;
+          gambarGps();
+        });
+      }
+
       el.querySelector('button')?.addEventListener('click', () => mulaiGps());
+    }
+
+    /**
+     * Ambil lokasi tanpa memaksa prompt izin.
+     *
+     * Kiosk yang sudah dipasang biasanya sudah pernah memberi izin; di
+     * perangkat itu lokasi bisa diambil diam-diam selagi magang mengetik.
+     * Kalau izinnya belum pernah diminta, membuka prompt otomatis setiap
+     * formulir justru mengganggu dan membuat layar tampak menggantung.
+     */
+    async function mulaiGpsJikaDiizinkan() {
+      if (!navigator.permissions?.query) return;
+
+      try {
+        const izin = await navigator.permissions.query({ name: 'geolocation' });
+        if (izin.state === 'granted' && langkah === 'siap' && !gps && gpsStatus === 'idle') {
+          mulaiGps();
+        }
+      } catch {
+        // Sebagian peramban tidak mengenal nama izin ini. Jangan menampilkan
+        // apa pun; tombol "Ambil lokasi" tetap tersedia.
+      }
     }
 
     function mulaiGps() {
@@ -238,6 +350,7 @@ export default {
       gpsStatus = 'memuat';
       gps = null;
       gpsPesan = '';
+      tanpaLokasi = false;
       gambarGps();
 
       janjiGps = ambilLokasi()
@@ -245,6 +358,7 @@ export default {
           if (urutan !== gpsUrutan) return null;
           gps = hasil;
           gpsStatus = 'siap';
+          tanpaLokasi = false;
           gambarGps();
           return hasil;
         })
@@ -259,6 +373,47 @@ export default {
       return janjiGps;
     }
 
+    function gambarPeringatanPerangkat() {
+      const el = panggung.querySelector('[data-perangkat]');
+      if (!el) return;
+
+      if (!perangkatGalat) {
+        el.hidden = true;
+        el.innerHTML = '';
+        return;
+      }
+
+      el.hidden = false;
+      el.innerHTML = `${IKON_GALAT}<span>${esc(perangkatGalat.message)} Perangkat ini mengirim ID
+        <code class="break-all font-mono">${esc(idPerangkat())}</code>. Minta admin mendaftarkannya
+        sebelum kiosk dipakai absen.</span>`;
+    }
+
+    function gambarLokasi() {
+      const el = akar.querySelector('[data-lokasi]');
+      if (!el) return;
+
+      if (perangkatGalat) {
+        el.className =
+          'flex items-center gap-1.5 rounded-full bg-white/75 px-3 py-1.5 text-xs font-medium text-rose-800 ring-1 ring-rose-500/20';
+        el.textContent = 'Perangkat belum terdaftar';
+        el.title = perangkatGalat.message;
+        return;
+      }
+
+      if (!lokasi) {
+        el.className = '';
+        el.textContent = '';
+        return;
+      }
+
+      el.className =
+        'kaca flex min-h-11 max-w-[46vw] min-w-0 items-center gap-1.5 rounded-full px-3 py-2 ' +
+        'text-xs font-medium text-ink sm:max-w-none sm:px-3.5 sm:text-sm';
+      el.title = lokasi.nama;
+      el.innerHTML = `${IKON_LOKASI}<span class="truncate">${esc(lokasi.nama)}</span>`;
+    }
+
     // ── langkah 1: NIP dan PIN ───────────────────────────────────────────────
 
     // `nipAwal` diisi saat PIN salah. NIP-nya sudah benar di kasus itu, dan
@@ -266,6 +421,7 @@ export default {
     // menyebalkan — apalagi kalau ada antrean di belakang.
     function tampilkanSiap(galat = '', nipAwal = '') {
       langkah = 'siap';
+      modeDisentuh = false;
 
       // Formulir baru selalu mulai dari "di perusahaan", jadi koordinat lama
       // tidak akan terpakai lagi. Dibuang di sini supaya tidak ada posisi
@@ -273,45 +429,65 @@ export default {
       lupakanGps();
 
       panggung.innerHTML = `
-        <div class="kaca w-full max-w-md rounded-[1.75rem] p-6 sm:p-7">
-          <h1 class="text-center text-lg font-semibold tracking-tight text-ink">Absen Kehadiran</h1>
-          <p class="mt-1 text-center text-sm text-muted">Masukkan NIP dan PIN Anda.</p>
+        <div class="kaca w-full max-w-md rounded-[1.5rem] p-4 sm:rounded-[1.75rem] sm:p-7">
+          <h1 class="text-center text-base font-semibold tracking-tight text-ink sm:text-lg">Absen Kehadiran</h1>
+          <p class="mt-1 text-center text-xs text-ink/70 sm:text-sm">Masukkan NIP dan PIN Anda.</p>
 
-          <form novalidate class="mt-6 space-y-4">
+          <div data-perangkat hidden
+               class="mt-3 flex items-start gap-2.5 rounded-xl border border-amber-500/25 bg-amber-500/10 p-3 text-xs text-amber-900"></div>
+
+          <form novalidate class="mt-4 space-y-3 sm:mt-6 sm:space-y-4">
             <fieldset>
               <legend class="mb-2 block text-sm font-medium text-ink">Absen dari mana?</legend>
               <div class="grid grid-cols-2 gap-1.5 rounded-2xl bg-ink/6 p-1.5">
-                <label class="cursor-pointer rounded-xl px-3 py-2.5 text-center text-sm font-medium
-                              text-muted transition duration-200 ease-apple
-                              has-[:checked]:bg-white has-[:checked]:text-ink has-[:checked]:shadow-naik">
+                <label class="cursor-pointer rounded-xl px-3 py-3 text-center text-sm font-medium
+                              text-ink/70 transition duration-200 ease-apple
+                              has-[:checked]:bg-white has-[:checked]:text-ink has-[:checked]:shadow-naik
+                              has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-merek
+                              has-[:focus-visible]:ring-offset-2 has-[:focus-visible]:ring-offset-white">
                   <input type="radio" name="mode" value="kantor" checked class="sr-only" />
                   Di perusahaan
                 </label>
-                <label class="cursor-pointer rounded-xl px-3 py-2.5 text-center text-sm font-medium
-                              text-muted transition duration-200 ease-apple
-                              has-[:checked]:bg-white has-[:checked]:text-ink has-[:checked]:shadow-naik">
+                <label class="cursor-pointer rounded-xl px-3 py-3 text-center text-sm font-medium
+                              text-ink/70 transition duration-200 ease-apple
+                              has-[:checked]:bg-white has-[:checked]:text-ink has-[:checked]:shadow-naik
+                              has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-merek
+                              has-[:focus-visible]:ring-offset-2 has-[:focus-visible]:ring-offset-white">
                   <input type="radio" name="mode" value="luar" class="sr-only" />
                   Di luar
                 </label>
               </div>
               <div data-gps class="mt-2 hidden"></div>
-              <p class="mt-2 text-xs text-muted">
-                Lokasi perangkat diambil untuk mencatat alamat absen, baik di perusahaan maupun di
-                luar. Pilihan "Di luar" untuk dinas luar dan wajib membawa GPS. Server menyimpan
-                titik serta alamat perkiraan Anda, lalu menampilkannya di rekap admin.
-              </p>
+              <details class="group mt-2 text-xs text-ink/70">
+                <summary class="flex cursor-pointer list-none items-center gap-1.5 font-medium text-ink
+                                [&::-webkit-details-marker]:hidden">
+                  Kenapa lokasi dicatat?
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"
+                       stroke-linecap="round" stroke-linejoin="round"
+                       class="size-3.5 transition duration-200 group-open:rotate-180" aria-hidden="true">
+                    <path d="m6 9 6 6 6-6" />
+                  </svg>
+                </summary>
+                <p class="mt-1.5 leading-relaxed">
+                  Lokasi mencatat alamat absen dan jaraknya ke kantor. Untuk dinas luar, GPS
+                  dianjurkan; bila perangkat tidak punya layanan lokasi, absen tetap bisa
+                  dikirim dan rekap akan menandainya.
+                </p>
+              </details>
             </fieldset>
 
-            <div>
-              <label for="nip" class="mb-1.5 block text-sm font-medium text-ink">NIP</label>
-              <input id="nip" name="nip" autocomplete="off" autocapitalize="characters" required
-                     value="${esc(nipAwal)}" placeholder="MGG001" class="${ISIAN} uppercase" />
-            </div>
+            <div class="grid grid-cols-2 gap-3">
+              <div>
+                <label for="nip" class="mb-1.5 block text-xs font-medium text-ink sm:text-sm">NIP</label>
+                <input id="nip" name="nip" autocomplete="off" autocapitalize="characters" required
+                       value="${esc(nipAwal)}" placeholder="MGG001" class="${ISIAN} uppercase" />
+              </div>
 
-            <div>
-              <label for="pin" class="mb-1.5 block text-sm font-medium text-ink">PIN</label>
-              <input id="pin" name="pin" type="password" inputmode="numeric" maxlength="6" required
-                     autocomplete="new-password" placeholder="••••" class="${ISIAN} tracking-[0.4em]" />
+              <div>
+                <label for="pin" class="mb-1.5 block text-xs font-medium text-ink sm:text-sm">PIN</label>
+                <input id="pin" name="pin" type="password" inputmode="numeric" maxlength="6" required
+                       autocomplete="new-password" placeholder="••••" class="${ISIAN} tracking-[0.4em]" />
+              </div>
             </div>
 
             <div data-galat role="alert" ${galat ? '' : 'hidden'}
@@ -328,17 +504,30 @@ export default {
       const isianNip = form.elements.nip;
       const isianPin = form.elements.pin;
 
+      gambarPeringatanPerangkat();
+
       for (const radio of form.querySelectorAll('[name="mode"]')) {
         radio.addEventListener('change', () => {
-          // Titik perangkat dipakai untuk kedua mode. Kalau pengambilan
-          // sebelumnya gagal, pilihan mode menjadi kesempatan mencoba lagi.
-          if (!gps && gpsStatus !== 'memuat') mulaiGps();
+          modeDisentuh = true;
+
+          // "Di luar" dianjurkan membawa koordinat, jadi mulai ambil lokasi
+          // begitu pilihan itu ditekan. "Di perusahaan" tidak memaksa: tombol
+          // "Ambil lokasi" tetap tersedia kalau alamatnya ingin dicatat.
+          if (radio.value === 'kantor') tanpaLokasi = false;
+          // Jangan mengulang otomatis setelah gagal: percobaan baru memakan
+          // 12 detik dan menyembunyikan pilihan "lanjut tanpa koordinat".
+          // Pengulangan hanya lewat tombol "Coba lagi".
+          if (radio.value === 'luar' && !gps && gpsStatus === 'idle') mulaiGps();
+
+          gambarGps();
         });
       }
 
-      // Lokasi diambil lebih dulu, selagi magang mengetik NIP dan PIN, supaya
-      // absen tidak perlu menunggu GPS setelah foto diambil.
-      mulaiGps();
+      // Jangan membuka prompt izin hanya karena formulir tampil. Kiosk yang
+      // sudah dipasang (izin sudah diberikan) tetap mengambil lokasi diam-diam;
+      // perangkat baru menunggu sampai lokasi memang dibutuhkan.
+      gambarGps();
+      mulaiGpsJikaDiizinkan();
 
       // Kalau NIP sudah terisi, PIN-lah satu-satunya yang perlu diketik.
       (nipAwal ? isianPin : isianNip).focus();
@@ -354,10 +543,10 @@ export default {
           // pergi tanpa menekan apa pun meninggalkan pilihan yang bukan
           // pilihannya, dan absennya tercatat di tempat yang salah.
           form.querySelector('[name="mode"][value="kantor"]').checked = true;
+          modeDisentuh = false;
           lupakanGps();
-          // Orang berikutnya juga perlu alamat absennya, jadi lokasi diambil
-          // ulang untuk formulir yang sudah bersih ini.
-          mulaiGps();
+          gambarGps();
+          mulaiGpsJikaDiizinkan();
           sembunyikanGalat(panggung);
         }, JEDA_DIAM);
       };
@@ -395,31 +584,24 @@ export default {
 
         const mode = form.elements.mode.value === 'luar' ? 'luar' : 'kantor';
 
-        // "Di luar" tanpa koordinat tidak dikirim. Menunggu permintaan yang
-        // masih jalan lebih baik daripada menyuruh orang menekan tombol dua
-        // kali; kalau ternyata gagal, sebabnya ditulis di layar.
-        if (mode === 'luar') {
-          if (!gps) {
-            await janjiGps?.catch(() => {});
-            if (!form.isConnected || langkah !== 'siap') return;
-            if (!gps) {
-              tampilkanGalat(
-                panggung,
-                gpsPesan || 'Lokasi belum didapat. Tekan "Coba lagi", atau pilih "Di perusahaan".',
-              );
-              return;
-            }
-          }
+        // "Di luar" dianjurkan membawa koordinat. Kalau perangkat tidak punya
+        // layanan lokasi, pengguna boleh mencentang "lanjut tanpa koordinat"
+        // dan absennya tetap dikirim dengan penanda di rekap.
+        if (mode === 'luar' && !gps && !tanpaLokasi) {
+          // Pilihan "luar" bisa datang tanpa perubahan radio (misalnya
+          // setelah halaman dipulihkan peramban), jadi pastikan permintaan
+          // lokasi benar-benar berjalan sebelum menunggu.
+          if (gpsStatus === 'idle') mulaiGps();
 
-          // Dicek sebelum kamera: menolak setelah foto diambil hanya membuat
-          // orang mengulang potret wajah tanpa tahu masalahnya di GPS.
-          if (!Number.isFinite(gps.akurasi) || gps.akurasi > AKURASI_MAKS) {
-            const angka = Number.isFinite(gps.akurasi) ? `±${gps.akurasi} m` : 'tidak tercatat';
+          await janjiGps?.catch(() => {});
+          if (!form.isConnected || langkah !== 'siap') return;
+
+          if (!gps && !tanpaLokasi) {
             tampilkanGalat(
               panggung,
-              `Akurasi GPS ${angka} terlalu kasar untuk absen dinas luar (maksimal ${AKURASI_MAKS} m). ` +
-                'Jarak dari kantor tidak memengaruhi pemeriksaan ini. Tekan "Ambil ulang" di status ' +
-                'lokasi, tunggu GPS membaik, atau pilih "Di perusahaan".',
+              gpsPesan ||
+                'Lokasi belum didapat. Centang "Lanjut absen di luar tanpa koordinat" bila ' +
+                  'perangkat ini tidak punya layanan lokasi, atau pilih "Di perusahaan".',
             );
             return;
           }
@@ -446,7 +628,8 @@ export default {
 
       panggung.innerHTML = `
         <div class="w-full max-w-md text-center">
-          <p class="text-sm font-medium text-muted">Hadapkan wajah Anda ke kamera</p>
+          <p class="inline-flex rounded-full bg-white/75 px-3 py-1 text-sm font-medium text-ink
+                    ring-1 ring-white/40">Hadapkan wajah Anda ke kamera</p>
 
           <div class="relative mt-4 overflow-hidden rounded-[1.75rem] bg-ink/10 ring-1 ring-ink/10">
             <video data-video playsinline muted
@@ -458,7 +641,8 @@ export default {
             </div>
           </div>
 
-          <p class="mt-4 text-sm text-muted">Foto diambil otomatis.</p>
+          <p class="mt-4 inline-flex rounded-full bg-white/75 px-3 py-1 text-sm text-ink/80
+                    ring-1 ring-white/40">Foto diambil otomatis.</p>
         </div>`;
 
       const video = panggung.querySelector('[data-video]');
@@ -529,7 +713,7 @@ export default {
     // (gagal cepat sebelum potret), tapi itu satu endpoint tambahan untuk
     // teman Anda dan PIN dikirim dua kali.
 
-    async function kirim(nip, pin, gambar, mode) {
+    async function kirim(nip, pin, gambar, mode, kunci = kunciBaru(), percobaan = 1) {
       langkah = 'simpan';
 
       // Tanpa `-scale-x-100`: gambarnya sudah dicerminkan di kanvas oleh
@@ -540,9 +724,10 @@ export default {
             <img src="${gambar}" alt="" class="block aspect-[4/3] w-full object-cover" />
           </div>
 
-          <p class="mt-5 flex items-center justify-center gap-2.5 text-sm font-medium text-muted">
+          <p class="mx-auto mt-5 flex w-fit items-center justify-center gap-2.5 rounded-full
+                    bg-white/75 px-3.5 py-1.5 text-sm font-medium text-ink ring-1 ring-white/40">
             ${IKON_MUTAR}
-            Menyimpan absen…
+            ${percobaan > 1 ? 'Mengirim ulang absen…' : 'Menyimpan absen…'}
           </p>
         </div>`;
 
@@ -554,6 +739,7 @@ export default {
           kiosk_id: idPerangkat(),
           lokasi_id: lokasi?.id ?? null,
           mode,
+          kunci_idempoten: kunci,
           // Titik perangkat ikut untuk kedua mode: server memakainya untuk
           // menghitung jarak dan mencari alamat yang tampil di rekap.
           ...(gps
@@ -572,11 +758,39 @@ export default {
           akurasi: jawab.akurasi,
           lokasi_teks: jawab.lokasi_teks,
           lokasi_meragukan: jawab.lokasi_meragukan,
+          tanpaKoordinat:
+            mode === 'luar' &&
+            (jawab.lokasi_tersedia === false ||
+              (jawab.akurasi === null && jawab.jarak_m === null)),
         });
       } catch (galat) {
-        // Kembali ke formulir dengan NIP tetap terisi. Yang perlu diulang cuma
-        // PIN-nya, bukan seluruh proses dari awal.
-        tampilkanSiap(galat.message, nip);
+        // Hanya kegagalan jaringan yang aman diulang otomatis. 409/422 berarti
+        // server sudah menjawab dan pengulangan tidak akan mengubah hasilnya.
+        // Kuncinya tetap sama supaya pengulangan tidak menghasilkan baris
+        // kedua kalau permintaan pertama ternyata sudah tercatat.
+        if (galat.jaringan && percobaan === 1 && langkah === 'simpan') {
+          jadwalkan(() => {
+            if (langkah === 'simpan') kirim(nip, pin, gambar, mode, kunci, 2);
+          }, 1500);
+          return;
+        }
+
+        // Pesan server sudah jelas bagi admin, tapi tidak bagi magang yang
+        // berdiri di depan kiosk. Sebutkan ID perangkat supaya admin bisa
+        // mendaftarkannya tanpa harus membuka DevTools.
+        const pesan =
+          galat.kode === 'tidak_berhak' && /perangkat kiosk/i.test(galat.message)
+            ? `${galat.message} Minta admin mendaftarkan ID perangkat ini: ${idPerangkat()}.`
+            : galat.message;
+
+        tampilkanHasil({
+          ok: false,
+          judul: galat.jaringan ? 'Koneksi terputus' : 'Absen tidak tercatat',
+          pesan,
+          ulangKirim: galat.jaringan
+            ? () => kirim(nip, pin, gambar, mode, kunci, 2)
+            : null,
+        });
       }
     }
 
@@ -593,6 +807,8 @@ export default {
       akurasi = null,
       lokasi_teks = null,
       lokasi_meragukan = false,
+      tanpaKoordinat = false,
+      ulangKirim = null,
     }) {
       langkah = 'hasil';
       bersihkanTimer();
@@ -601,32 +817,40 @@ export default {
       const detik = Math.ceil(JEDA_HASIL / 1000);
       const jarak = formatJarak(jarak_m);
       const akurasiTeks = Number.isFinite(akurasi) ? `GPS ±${Math.round(akurasi)} m` : null;
-      const kasar = lokasi_meragukan || (Number.isFinite(akurasi) && akurasi > 50);
-      const rincian = [lokasi_teks, jarak ? `${jarak} dari kantor` : null, akurasiTeks]
+      const kasar =
+        !tanpaKoordinat && (lokasi_meragukan || (Number.isFinite(akurasi) && akurasi > 50));
+      const perluCatatan = kasar || tanpaKoordinat;
+      const rincian = [
+        tanpaKoordinat ? 'Lokasi perangkat tidak tersedia' : null,
+        lokasi_teks,
+        jarak ? `${jarak} dari kantor` : null,
+        akurasiTeks,
+      ]
         .filter(Boolean)
         .join(' · ');
 
       panggung.innerHTML = `
-        <div class="w-full max-w-md text-center">
+        <div class="kaca w-full max-w-md rounded-[1.75rem] p-5 text-center sm:p-7">
           <span class="mx-auto grid size-16 place-items-center rounded-full ${
-            ok ? 'bg-emerald-500/15 text-emerald-700' : 'bg-rose-500/15 text-rose-700'
+            ok ? 'bg-emerald-500/15 text-emerald-800' : 'bg-rose-500/15 text-rose-800'
           }">
             ${ok ? IKON_BENAR : IKON_SALAH}
           </span>
 
           <h2 class="mt-5 text-2xl font-semibold tracking-tight text-ink">${esc(judul)}</h2>
-          ${pesan ? `<p class="mt-2 text-muted">${esc(pesan)}</p>` : ''}
+          ${pesan ? `<p class="mt-2 text-ink/70">${esc(pesan)}</p>` : ''}
 
           ${
             ok
-              ? `<div class="kaca mt-6 flex items-center gap-3.5 rounded-2xl p-3 text-left">
+              ? `<div class="mt-6 flex items-center gap-3.5 rounded-2xl bg-white/70 p-3 text-left
+                            ring-1 ring-ink/8">
                    <img src="${gambar}" alt="" class="size-14 shrink-0 rounded-xl object-cover" />
                    <span class="min-w-0 flex-1">
                      <span class="block truncate font-medium text-ink">${esc(nama)}</span>
-                     <span class="block text-sm text-muted">Pukul ${esc(jam(waktu))}</span>
+                     <span class="block text-sm text-ink/70">Pukul ${esc(jam(waktu))}</span>
                      ${
                        rincian
-                         ? `<span class="mt-1 block text-xs ${kasar ? 'font-medium text-amber-700' : 'text-muted'}">
+                         ? `<span class="mt-1 block text-xs ${perluCatatan ? 'font-medium text-amber-900' : 'text-ink/70'}">
                               ${esc(rincian)}${kasar ? ' · akurasi kasar' : ''}
                             </span>`
                          : ''
@@ -640,12 +864,37 @@ export default {
             ${IKON_ULANG} Mulai lagi
           </button>
 
-          <p class="mt-4 text-xs text-muted">
+          ${
+            ulangKirim
+              ? `<button type="button" data-kirim-ulang class="${TOMBOL_ULANG}">
+                   Kirim ulang absen
+                 </button>`
+              : ''
+          }
+
+          <p class="mt-4 text-xs text-ink/70">
             Kembali ke layar awal dalam <span data-sisa class="angka-rata">${detik}</span> detik
           </p>
         </div>`;
 
       panggung.querySelector('[data-ulang]').addEventListener('click', kembaliKeAwal);
+
+      const live = akar.querySelector('[data-live]');
+      if (live) live.textContent = [judul, nama, pesan].filter(Boolean).join('. ');
+
+      // Ikon hasil digambar setelah markup terpasang: lencana membesar dari
+      // kecil, lalu garis centang/silang menggambar dirinya. Kalau pengguna
+      // meminta gerak dikurangi, keduanya dilewati dan hasilnya tetap utuh.
+      pop(panggung.querySelector('span.grid'), { scale: 0.6, durasi: 0.5 });
+      panggung
+        .querySelectorAll('span.grid svg path')
+        .forEach((jalur, i) => coretJalur(jalur, { delay: 0.18 + i * 0.09 }));
+
+      panggung.querySelector('[data-kirim-ulang]')?.addEventListener('click', () => {
+        if (!ulangKirim) return;
+        bersihkanTimer();
+        ulangKirim();
+      });
 
       const el = panggung.querySelector('[data-sisa]');
       let sisa = detik;
@@ -670,9 +919,11 @@ export default {
     }
 
     // ── lokasi kiosk ─────────────────────────────────────────────────────────
-    // Diambil dari alamat halaman (#/absen?lokasi=2), bukan dari GPS. Kiosk ini
-    // PC yang tidak berpindah, jadi GPS hanya menambah izin yang harus
-    // diklik dan hasil yang bisa meleset.
+    // Diambil dari perangkat yang terdaftar, bukan dari GPS. Jawabannya juga
+    // membawa titik dan radius kantor, yang dipakai untuk menampilkan jarak
+    // perangkat di status GPS. Kalau panggilan ini gagal karena jaringan,
+    // absen tetap jalan; kalau gagal karena perangkat tidak terdaftar, itu
+    // harus terlihat sebelum orang menunggu potret wajah.
 
     async function muatLokasi() {
       const kueri = location.hash.split('?')[1] ?? '';
@@ -683,14 +934,22 @@ export default {
 
       try {
         lokasi = await api.get(`/kiosk/lokasi?${kueriLokasi}`);
-      } catch {
-        // Lokasi cuma keterangan di sudut layar. Kalau gagal, absen tetap jalan.
+        perangkatGalat = null;
+      } catch (galat) {
+        // 403 berarti server menolak identitas atau lokasi perangkat ini.
+        // Kegagalan jaringan tidak dianggap penolakan: kiosk tetap boleh
+        // mencoba absen, dan pesan jaringannya muncul saat absen dikirim.
+        if (galat.status === 403) {
+          perangkatGalat = galat;
+          gambarPeringatanPerangkat();
+          gambarLokasi();
+        }
         return;
       }
 
-      const el = akar.querySelector('[data-lokasi]');
-      el.className = 'kaca flex items-center gap-1.5 rounded-full px-3.5 py-2 text-sm font-medium text-ink';
-      el.innerHTML = `${IKON_LOKASI}${esc(lokasi.nama)}`;
+      gambarLokasi();
+      // Jarak ke kantor baru bisa dihitung setelah titik kantor datang.
+      gambarGps();
     }
 
     tampilkanSiap();

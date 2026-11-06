@@ -17,6 +17,7 @@ import {
   kartuAngka,
   pemilihBulan,
   kolomHarian,
+  kartuHarian,
 } from '../tabel.js';
 
 export default {
@@ -32,9 +33,9 @@ export default {
         ${pemilihBulan()}
       </div>
 
-      <div data-ringkasan class="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-4"></div>
+      <div data-ringkasan class="mt-5 grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-4"></div>
 
-      <div class="${KARTU} mt-6">
+      <div class="${KARTU} mt-5 sm:mt-6">
         <h2 class="text-lg font-semibold tracking-tight text-ink">Catatan harian</h2>
         <p data-jumlah class="mt-0.5 text-sm text-muted">Memuat…</p>
         <div data-daftar></div>
@@ -65,19 +66,19 @@ export default {
 
     function gambarRingkasan(r, hariKerja) {
       kotakRingkasan.innerHTML = [
-        kartuAngka('Hadir', r.hadir, `dari ${hariKerja} hari kerja`, 'text-emerald-600'),
+        kartuAngka('Hadir', r.hadir, `dari ${hariKerja} hari kerja`, 'text-emerald-800'),
         kartuAngka(
           'Terlambat',
           r.telat,
           r.telat_menit > 0 ? `total ${r.telat_menit} menit` : 'tidak pernah terlambat',
-          r.telat > 0 ? 'text-amber-600' : 'text-ink',
+          r.telat > 0 ? 'text-amber-800' : 'text-ink',
         ),
         kartuAngka('Izin & cuti', r.izin, 'hari yang sudah disetujui'),
         kartuAngka(
           'Tanpa catatan',
           r.alpha,
           r.alpha > 0 ? 'tidak ada absen masuk pada hari kerja' : 'tidak ada',
-          r.alpha > 0 ? 'text-rose-600' : 'text-ink',
+          r.alpha > 0 ? 'text-rose-800' : 'text-ink',
         ),
       ].join('');
     }
@@ -85,6 +86,7 @@ export default {
     async function muat() {
       gambarPemilih();
       elJumlah.textContent = 'Memuat…';
+      kotakRingkasan.innerHTML = '';
       kotakDaftar.innerHTML = '<p class="py-14 text-center text-sm text-muted">Memuat riwayat…</p>';
 
       let d;
@@ -109,9 +111,11 @@ export default {
 
       gambarRingkasan(d.ringkasan, d.hari_kerja ?? kerja);
       kotakDaftar.innerHTML = tabel({
+        judul: 'Riwayat absen',
         kolom,
         baris: d.data,
         kosong: `Belum ada catatan absen pada ${labelBulan(bulan)}.`,
+        kartu: kartuHarian,
       });
     }
 

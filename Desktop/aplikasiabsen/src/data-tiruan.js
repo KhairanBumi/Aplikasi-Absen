@@ -113,7 +113,7 @@ export const lokasi = [
     // dinas luar tetap diterima di luar radius.
     lintang: -6.2246,
     bujur: 106.8094,
-    radius_m: 50,
+    radius_m: 250,
   },
   {
     id: 2,
@@ -122,7 +122,7 @@ export const lokasi = [
     aktif: true,
     lintang: -6.2843,
     bujur: 107.166,
-    radius_m: 50,
+    radius_m: 250,
   },
 ];
 

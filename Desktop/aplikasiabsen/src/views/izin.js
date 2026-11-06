@@ -75,7 +75,7 @@ export default {
         <div class="mt-3.5 flex flex-wrap gap-x-6 gap-y-1.5 text-xs text-muted">
           <span>Terpakai <b data-terpakai class="font-semibold tabular-nums text-ink">0</b> hari</span>
           <span>Menunggu <b data-menunggu class="font-semibold tabular-nums text-ink">0</b> hari</span>
-          <span>Sisa <b data-sisa class="font-semibold tabular-nums text-merek">0</b> hari</span>
+          <span>Sisa <b data-sisa class="font-semibold tabular-nums text-merek-gelap">0</b> hari</span>
         </div>
       </div>
 
@@ -116,7 +116,7 @@ export default {
 
     function kartuPengajuan(z) {
       return `
-        <li class="rounded-2xl bg-white/55 p-4 ring-1 ring-ink/8">
+        <li class="rounded-2xl bg-ink/4 p-4 ring-1 ring-ink/8">
           <div class="flex flex-wrap items-center gap-2">
             ${lencanaJenis(z.jenis)}
             ${lencanaPengajuan(z.status)}
@@ -147,8 +147,8 @@ export default {
 
       kotakDaftar.innerHTML =
         daftar.length === 0
-          ? `<div class="flex flex-col items-center rounded-2xl bg-white/45 px-6 py-12 text-center ring-1 ring-ink/8">
-               <span class="grid size-14 place-items-center rounded-full bg-white/70 text-muted ring-1 ring-ink/8">
+          ? `<div class="flex flex-col items-center rounded-2xl bg-ink/4 px-6 py-12 text-center ring-1 ring-ink/8">
+               <span class="grid size-14 place-items-center rounded-full bg-ink/4 text-muted ring-1 ring-ink/8">
                  ${IKON_KOSONG}
                </span>
                <p class="mt-4 font-medium text-ink">Belum ada pengajuan</p>

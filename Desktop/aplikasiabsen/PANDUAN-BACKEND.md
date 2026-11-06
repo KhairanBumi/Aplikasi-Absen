@@ -226,19 +226,20 @@ Hal-hal yang perlu kamu tahu tentang alur ini:
   memunculkan prompt lokasi kepada orang yang kebetulan lewat. Kalau ingin
   lebih sopan, picu GPS saat kolom NIP pertama kali difokuskan/diketik.
 - **Memilih "di luar" adalah untuk dinas luar, bukan cuma keterangan.**
-  Koordinatnya dikunci sebelum absen boleh dikirim: `lintang`, `bujur`, dan
-  `akurasi` ikut terkirim. Backend menolak `422` kalau `mode: "luar"` datang
-  tanpa koordinat, tanpa akurasi, atau dengan akurasi yang terlalu kasar. Kalau
-  izinnya ditolak, layar menyebut sebabnya dan menyediakan tombol "Coba lagi";
-  magang masih bisa memilih "di perusahaan" untuk melanjutkan. Mode `kantor`
-  boleh tanpa koordinat.
+  Koordinat dikirim bila perangkat punya layanan lokasi. Backend menerima
+  `mode: "luar"` dengan atau tanpa koordinat. Tanpa koordinat, barisnya
+  ditandai `lokasi_tersedia: false` dan `lokasi_meragukan: true` supaya admin
+  bisa memeriksa. Koordinat separuh, atau `akurasi` tanpa koordinat, tetap
+  `422`. Kalau izin lokasi ditolak, layar menyebut sebabnya, menyediakan
+  "Coba lagi", dan menawarkan lanjut tanpa koordinat. Mode `kantor` juga boleh
+  tanpa koordinat.
 - **Jarak dihitung server, bukan browser — dan tidak dipakai menolak dinas
   luar.** Frontend hanya mengirim titik mentah. Server mengambil titik kantor
   dari lokasi yang dipasang di kiosk (`lintang`, `bujur`), menghitung jarak
   dengan **rumus Haversine**, lalu menyimpannya di `jarak_m`. Magang yang
   sedang bertugas di luar memang jauh dari kantor; menolak karena
   `jarak_m > radius_m` akan membuat fitur ini tidak bisa dipakai. `radius_m`
-  (bawaan **50 meter**) hanya pembanding "masih di area kantor". Jangan
+  (bawaan **250 meter**) hanya pembanding "masih di area kantor". Jangan
   menghitung jarak di JavaScript: angka dari klien bisa diubah sebelum dikirim.
 - **Alamatnya diisi server dari layanan gratis.** Setelah koordinat diterima,
   server memanggil **Nominatim OpenStreetMap** dan menyimpan alamat pendeknya
@@ -246,12 +247,11 @@ Hal-hal yang perlu kamu tahu tentang alur ini:
   tanpa kunci API; batasnya 1 permintaan/detik, hasilnya harus di-cache, dan
   aplikasi memperkenalkan diri lewat `User-Agent`/`Referer`. Kalau layanan
   gagal, absen tetap diterima dan `lokasi_teks` boleh `null`.
-- **Akurasi GPS bukan jaminan.** Angka `akurasi` adalah jari-jari perkiraan
-  dalam meter. Server menolak `422` kalau akurasinya hilang atau di atas
-  **150 m**, karena pada angka itu posisinya terlalu kasar untuk dicatat.
-  Angka yang lolos tetap disimpan dan ditampilkan sebagai "± N m"; admin
-  melihatnya sebagai catatan, bukan bukti. Di halaman admin ada catatan kecil
-  kalau akurasinya kasar.
+- **Akurasi GPS bukan jaminan, dan bukan syarat penolakan.** Angka `akurasi`
+  adalah jari-jari perkiraan dalam meter. Server menyimpannya apa adanya,
+  termasuk `null` atau angka di atas **150 m**, lalu menandai
+  `lokasi_meragukan` supaya admin memeriksa. Angka itu ditampilkan sebagai
+  "± N m" atau "tidak tercatat"; admin melihatnya sebagai catatan, bukan bukti.
 - **Lokasi kantornya tetap dari alamat halaman**, bukan dari GPS: PC kiosk tidak
   berpindah, jadi `#/absen?lokasi=2` diatur sekali saat pemasangan. **Satu PC
   kiosk = satu alamat tetap.** Kamu tinggal minta admin menyimpan alamat itu
@@ -284,17 +284,21 @@ Hal-hal yang perlu kamu tahu tentang alur ini:
 >   jarak dari koordinat PC. Kalau kiosk di kantor juga berada di jaringan
 >   kantor, allowlist IP boleh dipakai sebagai lapisan tambahan — bukan
 >   satu-satunya kontrol, karena tablet lapangan harus tetap bisa absen.
-> - **Mode "di luar" mewajibkan GPS dan akurasi yang wajar.** Kalau PC kiosk
->   melaporkan akurasi ratusan meter, server menolaknya dengan pesan yang
->   menyebut angka akurasinya — jangan dilonggarkan diam-diam, karena titik
->   yang kasar tidak berguna untuk melacak posisi. Kalau kiosk memang dipakai
->   untuk dinas luar, pasang GPS dongle atau arahkan magang memakai HP.
+> - **Mode "di luar" dianjurkan membawa GPS, bukan diwajibkan.** Kalau PC
+>   kiosk melaporkan akurasi ratusan meter atau tidak menemukan lokasi sama
+>   sekali, absennya tetap diterima dan ditandai. Kalau titik presisi memang
+>   diperlukan, pasang GPS dongle atau arahkan magang memakai HP.
 > - **Angka akurasi ditampilkan apa adanya** sebagai "± N m", bukan dipakai
->   menuduh. Jarak dan akurasi adalah petunjuk untuk admin, bukan bukti. Kalau
->   ingin menolak atau menerima berdasarkan itu, putuskan di server dan tulis
->   alasannya di pesan galat.
+>   menuduh atau menolak. Jarak dan akurasi adalah petunjuk untuk admin,
+>   bukan bukti.
 > - **Jarak yang jauh bukan pelanggaran.** Dinas luar memang di luar kantor.
 >   Server mencatat jaraknya untuk keterangan, bukan untuk menolak.
+
+> **Windows: cek layanan lokasi lebih dulu.** Kalau Chrome/Edge tidak mendapat
+> titik sama sekali padahal izin browser sudah diberikan, jalankan
+> `Get-Service lfsvc` — statusnya harus `Running`, dan akses lokasi Windows
+> harus diizinkan. Jangan memakai override geolocation di alat uji sebagai
+> bukti GPS asli; uji dengan peramban biasa.
 
 ### 3.2 Masuk — `#/masuk`
 
@@ -386,7 +390,7 @@ layarnya akan berperilaku aneh:
    perlu diubah sama sekali. Tolak nilai di luar daftar dengan `422`.
 5. **Lokasi sekarang menyimpan titik kantor dan radius.** Formulir Lokasi Kantor
    mengirim `lintang` (−90…90), `bujur` (−180…180), dan `radius_m` (1–5000,
-   bawaan 50). Ketiganya wajib ada di `GET /admin/lokasi` karena dipakai server
+   bawaan 250). Ketiganya wajib ada di `GET /admin/lokasi` karena dipakai server
    untuk menghitung jarak absen dan ditampilkan di layar. `radius_m` hanya
    pembanding area kantor, bukan pagar penolakan dinas luar. Tanpa titik
    kantor, absen "di luar" tidak punya pembanding dan harus ditolak dengan
@@ -654,15 +658,25 @@ bukan pekerjaan teknis, tapi kalau dilewati, semua sisanya tidak ada gunanya.
    ```
 
    Aturannya:
-   - **`mode: "luar"` wajib** membawa `lintang`/`bujur` yang sah dan `akurasi`.
-     Tanpa itu → `422`.
-   - **`akurasi > 150 m` → `422`.** Pada angka itu posisinya terlalu kasar
-     untuk dicatat; pesannya sebut angka akurasinya dan minta nyalakan GPS
-     presisi.
+   - **`mode: "luar"` boleh tanpa koordinat.** Kalau `lintang`/`bujur` ada,
+     keduanya harus berpasangan dan sah; `akurasi` boleh `null`. Koordinat
+     separuh atau `akurasi` tanpa koordinat → `422` dengan
+     `kode: "koordinat_tidak_lengkap"`. Tanpa koordinat → tetap `200`,
+     `lokasi_tersedia: false`, `lokasi_meragukan: true`.
+   - **Akurasi kasar tidak ditolak.** Simpan angkanya apa adanya dan tandai
+     `lokasi_meragukan` bila akurasi `null` atau di atas 50 m. Jangan
+     mengarang angka 0.
    - **`jarak_m` dihitung dan disimpan, tetapi TIDAK dipakai menolak.**
-     Dinas luar memang jauh dari kantor. `radius_m` (bawaan **50**) hanya
+     Dinas luar memang jauh dari kantor. `radius_m` (bawaan **250**) hanya
      pembanding area kantor. Jangan pernah memakai `jarak_m` kiriman klien —
      hitung sendiri, lalu simpan hasilmu.
+
+   > **Keputusan produk 29 Oktober 2026.** Absen luar tanpa koordinat atau
+   > dengan akurasi kasar tetap diterima dan ditandai. Layanan lokasi
+   > perangkat (misalnya Location Services Windows) bisa dimatikan, dan itu
+   > bukan kesalahan magang. Penolakan akurasi juga tidak mencegah fake GPS;
+   > pertahanannya ada di perangkat kiosk terdaftar, PIN, foto, dan tanda
+   > periksa untuk admin.
    - **Isi `lokasi_teks`** dengan alamat hasil Nominatim. Kalau layanan gagal,
      simpan `null` dan absen tetap diterima. Batas Nominatim 1 permintaan/detik
      dan wajib cache; kalau kiosknya banyak, antrekan atau pindahkan ke job.
@@ -670,8 +684,8 @@ bukan pekerjaan teknis, tapi kalau dilewati, semua sisanya tidak ada gunanya.
      pertahanannya adalah perangkat kiosk terdaftar + PIN. Kalau koordinat
      tetap dikirim, simpan sebagai keterangan dan jangan tolak hanya karena
      jauh.
-   - **Fake GPS:** simpan `ip`, `user_agent`, dan `kiosk_id`, tolak akurasi yang
-     tidak masuk akal, dan bandingkan dengan absen terakhir orang yang sama
+   - **Fake GPS:** simpan `ip`, `user_agent`, dan `kiosk_id`, tandai akurasi
+     yang kasar, dan bandingkan dengan absen terakhir orang yang sama
      (perpindahan mustahil dalam waktu singkat). Untuk aplikasi native, periksa
      mock location. Jangan jadikan koordinat satu-satunya bukti — selfie,
      perangkat terdaftar, dan PIN tetap dipakai. Jarak yang jauh dari kantor
@@ -753,10 +767,10 @@ database, menghitung Haversine sendiri, lalu menyimpan hasilnya. Frontend hanya
 mengirim titik mentah dan menampilkan angka yang dikembalikan server.
 
 **Menolak absen dinas luar karena jauh dari kantor.** Ini kesalahan yang
-mudah terjadi kalau kamu membawa aturan "radius 50 m" dari absensi kantor.
-Dinas luar justru berarti magangnya di tempat lain; tolak hanya kalau koordinat
-atau akurasinya tidak masuk akal. Jarak tetap disimpan sebagai keterangan,
-bukan pagar.
+mudah terjadi kalau kamu membawa aturan "radius 250 m" dari absensi kantor.
+Dinas luar justru berarti magangnya di tempat lain; jarak tetap disimpan
+sebagai keterangan, bukan pagar. Koordinat yang tidak tersedia atau kasar juga
+bukan alasan menolak — tandai saja untuk admin.
 
 **Fake GPS.** Aplikasi Fake GPS bisa membuat HP melaporkan koordinat mana pun.
 Karena absen dinas luar boleh jauh, jarak bukan penjaga. Pakai berlapis:
@@ -769,10 +783,11 @@ periksa mock location. Jangan menuduh otomatis dari satu angka — tampilkan
 tanda "perlu diperiksa" ke admin.
 
 **Akurasi GPS dianggap jaminan.** Angka `akurasi` adalah jari-jari perkiraan,
-bukan kepastian. Di PC kiosk tanpa GPS, browsernya bisa meleset ratusan meter.
-Kalau `akurasi` hilang atau di atas 150 m, tolak dengan pesan yang menyebut
-angkanya — jangan diam-diam menganggapnya tepat. Kalau lolos, simpan dan
-tampilkan sebagai "± N m" supaya admin tahu seberapa besar harus percaya.
+bukan kepastian. Di PC kiosk tanpa GPS, browsernya bisa meleset ratusan meter
+atau tidak menemukan titik sama sekali. Jangan menolak absen karena akurasi
+hilang atau kasar; simpan angkanya apa adanya dan tampilkan sebagai "± N m"
+atau "tidak tercatat" supaya admin tahu seberapa besar harus percaya. Baris
+tanpa koordinat ditandai `lokasi_meragukan` dan `lokasi_tersedia: false`.
 
 **Memanggil Nominatim tanpa batas.** Layanan gratis ini tetap punya aturan:
 maksimal 1 permintaan/detik, wajib cache, dan `User-Agent` yang jelas. Jangan
@@ -935,7 +950,7 @@ curl -X POST http://127.0.0.1:8000/api/kiosk/absen \
   -H "Accept: application/json" -H "Content-Type: application/json" \
   -d "{\"nip\":\"MGG001\",\"pin\":\"4321\",\"kiosk_id\":\"kiosk-uji-1\",\"lokasi_id\":1,\"mode\":\"luar\",\"lintang\":-6.224650,\"bujur\":106.809450,\"akurasi\":12,\"foto\":\"$FOTO\"}"
 
-# harus 422: mode luar tanpa koordinat
+# harus 200: mode luar tanpa koordinat (ditandai lokasi_meragukan)
 curl -X POST http://127.0.0.1:8000/api/kiosk/absen \
   -H "Accept: application/json" -H "Content-Type: application/json" \
   -d "{\"nip\":\"MGG001\",\"pin\":\"4321\",\"kiosk_id\":\"kiosk-uji-1\",\"lokasi_id\":1,\"mode\":\"luar\",\"foto\":\"$FOTO\"}"
@@ -946,10 +961,15 @@ curl -X POST http://127.0.0.1:8000/api/kiosk/absen \
   -H "Accept: application/json" -H "Content-Type: application/json" \
   -d "{\"nip\":\"MGG002\",\"pin\":\"2222\",\"kiosk_id\":\"kiosk-uji-1\",\"lokasi_id\":1,\"mode\":\"luar\",\"lintang\":-6.208812,\"bujur\":106.845599,\"akurasi\":12,\"foto\":\"$FOTO\"}"
 
-# harus 422: akurasi hilang atau terlalu kasar
+# harus 200: akurasi kasar tetap dicatat dan ditandai
 curl -X POST http://127.0.0.1:8000/api/kiosk/absen \
   -H "Accept: application/json" -H "Content-Type: application/json" \
   -d "{\"nip\":\"MGG002\",\"pin\":\"2222\",\"kiosk_id\":\"kiosk-uji-1\",\"lokasi_id\":1,\"mode\":\"luar\",\"lintang\":-6.224650,\"bujur\":106.809450,\"akurasi\":250,\"foto\":\"$FOTO\"}"
+
+# harus 422: koordinat separuh (lintang saja) tetap tidak sah
+curl -X POST http://127.0.0.1:8000/api/kiosk/absen \
+  -H "Accept: application/json" -H "Content-Type: application/json" \
+  -d "{\"nip\":\"MGG002\",\"pin\":\"2222\",\"kiosk_id\":\"kiosk-uji-1\",\"lokasi_id\":1,\"mode\":\"luar\",\"lintang\":-6.224650,\"foto\":\"$FOTO\"}"
 
 # harus 403: kiosk_id yang belum terdaftar
 curl -X POST http://127.0.0.1:8000/api/kiosk/absen \
@@ -1018,10 +1038,12 @@ Uji juga yang **seharusnya gagal** — bagian ini yang paling sering lupa dikerj
   bukan `422`. `jarak_m` di baris absen harus menunjukkan angka yang wajar.
   Coba juga mengirim `jarak_m: 0` dari klien: server harus tetap menyimpan
   hasil hitungannya sendiri, bukan angka kiriman itu.
-- `mode: "luar"` tanpa `akurasi` → `422`
-- `mode: "luar"` dengan `akurasi: 250` → `422`
-- Lokasi yang belum punya `lintang`/`bujur` → absen luar `422` dengan pesan
-  yang menyebut admin perlu mengisi titik lokasi
+- `mode: "luar"` tanpa koordinat → `200`, `lokasi_tersedia: false`,
+  `lokasi_meragukan: true`
+- `mode: "luar"` dengan `akurasi: 250` → `200`, `lokasi_meragukan: true`
+- `mode: "luar"` dengan koordinat separuh → `422`
+- Lokasi yang belum punya `lintang`/`bujur` → absen luar yang mengirim
+  koordinat `422` dengan pesan yang menyebut admin perlu mengisi titik lokasi
 - `lokasi_teks` terisi alamat yang masuk akal. Kalau Nominatim dimatikan,
   absen tetap `200` dan `lokasi_teks` bernilai `null`
 - `POST /masuk` dengan akun yang sudah dinonaktifkan → `403`, bukan `200`
@@ -1077,10 +1099,10 @@ lalu buka Network tab di browser. Yang seharusnya kamu lihat:
    `bujur`, serta `akurasi`. Balasannya `200`, layar hijau "Absen masuk
    tercatat" muncul, dan
    balasan itu membawa `jarak_m` serta `lokasi_teks` hasil server. Titik yang
-   jauh dari kantor **tetap diterima** — dinas luar memang begitu. Kalau
-   akurasinya terlalu kasar, balasannya `422` dan pesannya menyebut angkanya.
-   Kalau izin lokasinya ditolak, absen **tidak boleh terkirim** dan tombol
-   "Coba lagi" muncul
+   jauh dari kantor **tetap diterima** — dinas luar memang begitu. Akurasi
+   kasar juga tetap diterima dan ditandai di rekap. Kalau perangkat tidak
+   menemukan lokasi, centang "Lanjut absen di luar tanpa koordinat"; absen
+   tetap terkirim dengan `lokasi_tersedia: false`
 4. Membuka **Data Master → Anak Magang** memanggil `GET /api/admin/magang`. Di
    database yang baru dibuat, tabelnya **kosong** dan yang muncul adalah ajakan
    menambah — itu benar, bukan endpoint yang belum jalan (perhatikan
@@ -1120,7 +1142,8 @@ lalu buka Network tab di browser. Yang seharusnya kamu lihat:
     bujur, dan radius. Ubah titik kantor ke lokasi tempat kamu menguji, lalu
     coba absen "Di luar" dari jarak yang jelas lebih jauh dari radius — server
     harus **menerimanya** (`200`) dan mencatat `jarak_m` serta alamatnya. Yang
-    ditolak hanya titik tanpa koordinat atau akurasi yang terlalu kasar
+    ditolak hanya koordinat separuh; tanpa koordinat sama sekali absen tetap
+    diterima dan ditandai `lokasi_meragukan`
 
 Kalau salah satu langkah balasannya `404`, alamatnya belum kamu buat. Kalau
 `500`, ada yang salah di sisi servermu dan pesannya ada di log Laravel. Kalau

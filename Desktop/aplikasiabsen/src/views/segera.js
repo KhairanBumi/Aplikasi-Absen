@@ -18,7 +18,7 @@ export default {
 
     isi.innerHTML = `
       <div class="kaca mx-auto flex max-w-2xl flex-col items-center rounded-[1.75rem] px-6 py-16 text-center sm:py-20">
-        <span class="grid size-16 place-items-center rounded-full bg-white/70 text-merek
+        <span class="grid size-16 place-items-center rounded-full bg-white/70 text-merek-gelap
                      ring-1 ring-ink/8">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"
                stroke-linecap="round" stroke-linejoin="round" class="size-8" aria-hidden="true">
@@ -31,7 +31,7 @@ export default {
         </span>
 
         <h2 class="mt-5 text-xl font-semibold tracking-tight text-ink">Layar ini sedang disiapkan</h2>
-        <p class="mx-auto mt-2 max-w-md text-muted">
+        <p class="mx-auto mt-2 max-w-md text-ink/70">
           ${
             butir?.fase
               ? `Rencananya dikerjakan pada <span class="font-medium text-ink">Fase ${butir.fase}</span>.`

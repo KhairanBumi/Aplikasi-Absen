@@ -1,5 +1,20 @@
 # Panduan Perbaikan — Kesesuaian dengan `PANDUAN-BACKEND.md`
 
+> **Audit status — 28 Oktober 2026.** Dokumen ini ditulis sebelum beberapa
+> perbaikan masuk. Item yang sudah selesai: P0-1 (mock DEV-only + pemeriksaan
+> build), P0-2 (rate limit kiosk), P0-3 (PIN hash, tidak dikembalikan), P0-4
+> (token acak + kedaluwarsa), P0-5 (Nominatim server + cache), P1-2 (`401`),
+> P1-3 (tanggal Jakarta), P1-4 (GPS), P2-1 (PIN tidak tampil), P2-2 (CSV),
+> P2-3 (CSP), P2-4 (batas foto), P2-5 (audit log). Yang masih terbuka: allowlist
+> IP sebagai lapisan tambahan (diputuskan sebagai penanda anomali, bukan
+> penolakan) dan verifikasi akhir di staging. Baca kode sebelum mengerjakan
+> ulang item di bawah.
+>
+> **Perubahan kebijakan 29 Oktober 2026:** absen luar tanpa koordinat atau
+> dengan akurasi kasar sekarang tetap diterima dan ditandai
+> (`lokasi_tersedia`, `lokasi_meragukan`), bukan `422`. Daftar uji di bawah
+> sudah disesuaikan; `KONTRAK-API.md` adalah acuan bentuk response.
+
 Dokumen ini hanya membahas **hal-hal yang belum sesuai** dengan
 `PANDUAN-BACKEND.md` dan hal-hal yang harus diselesaikan sebelum aplikasi
 dipublikasikan. Bug/hardening di luar PANDUAN dicatat terpisah di bagian akhir.
@@ -507,7 +522,7 @@ Perbarui PANDUAN:
 **Kriteria selesai**
 
 - Tidak ada lagi perbedaan antara kode dan PANDUAN.
-- Mode `luar` tanpa GPS tetap `422`.
+- Mode `luar` tanpa GPS tetap bisa dikirim dan ditandai `lokasi_tersedia: false`.
 - Mode `kantor` tetap bisa absen tanpa GPS.
 - Perilaku prompt dijelaskan di dokumen.
 
@@ -589,8 +604,9 @@ Catat:
 - [ ] Token kedaluwarsa → `401`.
 - [ ] `GET /admin/magang` tidak memuat `pin`/`pin_hash`.
 - [ ] Database tidak menyimpan PIN terbaca.
-- [ ] Mode luar tanpa koordinat → `422`.
-- [ ] Mode luar akurasi 250 m → `422`.
+- [ ] Mode luar tanpa koordinat → `200`, `lokasi_tersedia: false`, ditandai.
+- [ ] Mode luar akurasi 250 m → `200`, `lokasi_meragukan: true`.
+- [ ] Mode luar koordinat separuh → `422`.
 - [ ] Mode luar jarak jauh tetap `200`.
 - [ ] Nominatim mati → absen `200`, `lokasi_teks` null.
 - [ ] Dua absen koordinat sama → satu request Nominatim.

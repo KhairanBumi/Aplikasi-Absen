@@ -80,7 +80,7 @@ SEED_LOKASI_NAMA="Kantor Pusat"
 SEED_LOKASI_ALAMAT="Alamat kantor"
 SEED_LOKASI_LINTANG=-6.2246
 SEED_LOKASI_BUJUR=106.8094
-SEED_LOKASI_RADIUS_M=50
+SEED_LOKASI_RADIUS_M=250
 
 SEED_SHIFT_NAMA="Reguler"
 SEED_SHIFT_MASUK="08:00"
@@ -98,8 +98,18 @@ PIN admin ke nilai `.env` saat itu.
 Migrasi dan data awal:
 
 ```bash
-php artisan migrate --seed --force
+php artisan migrate --force
 ```
+
+Seeder hanya untuk pemasangan pertama, **bukan** untuk setiap deploy:
+
+```bash
+php artisan db:seed --force
+```
+
+Seeder memakai `updateOrCreate`; menjalankannya lagi akan mengatur ulang PIN
+admin ke nilai `ADMIN_PIN` di `.env`. Jangan simpan `ADMIN_PIN` produksi di
+repo dan jangan jalankan seeder rutin.
 
 Hak akses:
 
@@ -159,10 +169,15 @@ lewat `http://IP-kantor`.
 Build frontend, lalu salin hasilnya ke `backend/public`:
 
 ```bash
+cd /var/www/aplikasiabsen
 npm ci
 npm run build
-cp -r dist/* /var/www/aplikasiabsen/backend/public/
+cp -r dist/* backend/public/
 ```
+
+`npm ci` harus dijalankan dari akar proyek, bukan dari `backend/`; berkas
+`package.json` frontend ada di sana. Jangan menyalin `dist` ke
+`backend/public/dist` — isinya harus berada langsung di `backend/public`.
 
 `index.html` disajikan oleh route `/` Laravel; aset statis dilayani Nginx.
 Frontend memakai hash router, jadi tidak perlu catch-all tambahan. Pastikan
@@ -207,7 +222,9 @@ timedatectl status
 
 ## 10. Backup
 
-Contoh harian (sesuaikan kredensial dan folder):
+Prosedur utama adalah `backend/deploy/backup.sh` dan
+`backend/deploy/restore.sh` (lihat `docs/OPERASIONAL.md`). Contoh manual
+berikut hanya untuk keadaan darurat:
 
 ```bash
 sudo mkdir -p /var/backups/absen
@@ -231,12 +248,25 @@ INSERT INTO perangkat_kiosk (id, nama, lokasi_id, aktif, created_at)
 VALUES ('kiosk-gudang-cikarang', 'Kiosk Gudang Cikarang', 2, 1, NOW());
 ```
 
-Di browser kiosk, set identitas perangkat sebelum halaman kiosk dipakai:
+Di browser kiosk, set identitas perangkat sebelum halaman kiosk dipakai.
+Cara yang disarankan: isi `VITE_KIOSK_ID` saat build untuk kiosk itu.
+
+```bash
+# di salinan build kiosk tersebut
+VITE_KIOSK_ID=kiosk-gudang-cikarang npm run build
+```
+
+`VITE_KIOSK_ID` menang atas `localStorage`, jadi satu build hanya cocok untuk
+satu kiosk. Kalau build dipakai bersama banyak kiosk, kosongkan
+`VITE_KIOSK_ID` lalu set lewat konsol browser:
 
 ```js
 localStorage.setItem('absen-kiosk-perangkat', 'kiosk-gudang-cikarang');
 location.reload();
 ```
+
+Kalau ID-nya belum terdaftar, layar kiosk menampilkan peringatan berisi ID yang
+dikirim, supaya admin bisa mendaftarkannya tanpa membuka DevTools.
 
 `POST /kiosk/absen` menolak `kiosk_id` yang tidak terdaftar/nonaktif dengan
 `403`.
@@ -256,7 +286,24 @@ Periksa:
 - Login admin berhasil, `GET /api/saya/profil` mengembalikan objek yang sama.
 - Absen kiosk menyimpan foto di `storage/app/private/absen/...`, dan URL
   `/storage/...` tidak bisa diakses langsung.
-- `php artisan test` lulus di server (opsional, butuh SQLite/DB test).
+- `php artisan test` dijalankan di CI dan di salinan staging, bukan di server
+  produksi. Server produksi memakai `composer install --no-dev`, sehingga
+  PHPUnit tidak tersedia. Untuk menjalankan tes di server, pasang dependensi
+  pengembangan di salinan terpisah, jangan mengubah instalasi produksi.
+
+## 12a. CI
+
+Workflow ada di `.github/workflows/ci.yml` (akar repo), bukan di
+`backend/.github/`. CI menjalankan `npm test`, `npm run build`, dan
+`php artisan test` untuk PHP 8.3 dan 8.4. Pull request tidak boleh digabung
+kalau CI merah.
+
+## 12b. Backup dan retensi
+
+Jangan memakai perintah `mysqldump` manual di dokumen ini sebagai prosedur
+utama. Gunakan `backend/deploy/backup.sh` dan `backend/deploy/restore.sh`
+seperti dijelaskan di `docs/OPERASIONAL.md`. Skrip itu menolak berjalan tanpa
+berkas kredensial MySQL dan menyimpan checksum.
 
 ## 13. Firewall
 

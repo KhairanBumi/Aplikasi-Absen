@@ -114,6 +114,45 @@ class AdminLaporanTest extends TestCase
         $this->assertSame(1, $baris[$nonaktif->id]['hadir']);
     }
 
+    public function test_status_harian_untuk_matriks_csv_hanya_dikirim_saat_rinci(): void
+    {
+        HariLibur::create(['tanggal' => '2026-10-20', 'keterangan' => 'Libur Uji']);
+
+        $magang = $this->buatPengguna('MGG020', 'Magang Matriks', 'magang', '2026-10-05');
+
+        $this->absen($magang, '2026-10-05', 'masuk', '2026-10-05 08:20:00', ['telat_menit' => 20]);
+
+        $token = $this->tokenAdmin();
+
+        $this->withHeader('Authorization', 'Bearer '.$token)
+            ->getJson('/api/admin/laporan?bulan=2026-10')
+            ->assertOk()
+            ->assertJsonMissingPath('data.0.harian');
+
+        $res = $this->withHeader('Authorization', 'Bearer '.$token)
+            ->getJson('/api/admin/laporan?bulan=2026-10&rinci=1')
+            ->assertOk()
+            ->assertJsonPath('data.0.nama', 'Magang Matriks')
+            ->assertJsonPath('data.0.lokasi', 'Kantor Pusat')
+            ->assertJsonPath('data.0.masuk_kerja', '2026-10-05')
+            ->assertJsonCount(31, 'data.0.harian')
+            ->assertJsonStructure([
+                'data' => [[
+                    'harian' => [['tanggal', 'status', 'keterangan_libur']],
+                ]],
+            ]);
+
+        $hari = collect($res->json('data.0.harian'))->keyBy('tanggal');
+
+        $this->assertSame('telat', $hari['2026-10-05']['status']);
+        $this->assertSame('Belum masuk kerja', $hari['2026-10-01']['keterangan_libur']);
+        $this->assertSame('libur', $hari['2026-10-04']['status']);
+        $this->assertSame('Hari Minggu', $hari['2026-10-04']['keterangan_libur']);
+        $this->assertSame('libur', $hari['2026-10-20']['status']);
+        $this->assertSame('Libur Uji', $hari['2026-10-20']['keterangan_libur']);
+        $this->assertSame('belum', $hari['2026-10-21']['status']);
+    }
+
     public function test_rincian_harian_memuat_seluruh_hari_dan_status_yang_benar(): void
     {
         HariLibur::create(['tanggal' => '2026-10-20', 'keterangan' => 'Libur Uji']);

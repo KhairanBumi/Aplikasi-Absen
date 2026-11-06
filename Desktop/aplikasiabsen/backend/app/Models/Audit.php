@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Http\Request;
 
 class Audit extends Model
@@ -17,6 +18,11 @@ class Audit extends Model
         'rincian' => 'array',
         'created_at' => 'datetime',
     ];
+
+    public function pengguna(): BelongsTo
+    {
+        return $this->belongsTo(Pengguna::class, 'pengguna_id');
+    }
 
     public static function catat(?int $penggunaId, string $aksi, array $rincian, Request $request): void
     {

@@ -11,7 +11,7 @@
 // kalau tidak, laporannya melaporkan orang yang sudah keluar sebagai mangkir
 // selama dua minggu.
 
-import { api } from '../api.js';
+import { api, pengguna } from '../api.js';
 import {
   esc,
   inisial,
@@ -28,45 +28,12 @@ import {
   kartuAngka,
   pemilihBulan,
   kolomHarian,
+  kartuHarian,
   TOMBOL_BARIS,
   TOMBOL_HALUS,
 } from '../tabel.js';
-
-/**
- * Unduh sebagai berkas CSV.
- *
- * Pemisahnya titik koma, bukan koma. Excel di komputer berbahasa Indonesia
- * memakai koma sebagai pemisah desimal, jadi berkas berpemisah koma akan
- * membuka seluruh isinya di satu kolom. Titik koma adalah yang diharapkan
- * Excel di sana.
- *
- * BOM di depan ditulis eksplisit supaya huruf beraksen dan tanda baca Indonesia
- * tidak berubah jadi simbol aneh saat Excel menebak sendiri encoding-nya.
- */
-function unduhCSV(namaBerkas, kepala, baris) {
-  const sel = (nilai) => {
-    let teks = String(nilai ?? '');
-
-    // Excel/LibreOffice mengeksekusi sel yang dimulai dengan =, +, -, atau @
-    // sebagai rumus. Nama magang "=1+1" tidak boleh berubah jadi angka 2 saat
-    // berkasnya dibuka. Awali dengan apostrof supaya diperlakukan sebagai teks.
-    if (/^[=+\-@\t\r]/.test(teks)) teks = `'${teks}`;
-
-    return `"${teks.replace(/"/g, '""')}"`;
-  };
-  const isi = [kepala, ...baris].map((b) => b.map(sel).join(';')).join('\r\n');
-
-  const tautan = document.createElement('a');
-  tautan.href = URL.createObjectURL(new Blob([`\ufeff${isi}`], { type: 'text/csv;charset=utf-8' }));
-  tautan.download = namaBerkas;
-  document.body.appendChild(tautan);
-  tautan.click();
-  tautan.remove();
-
-  // URL-nya dicabut setelah jeda singkat. Melepasnya pada tick yang sama dengan
-  // klik membatalkan unduhannya di sebagian browser.
-  setTimeout(() => URL.revokeObjectURL(tautan.href), 2000);
-}
+import { unduhCSV } from '../csv.js';
+import { susunMatriksCSV } from '../laporan-csv.js';
 
 export default {
   judul: 'Rekap & Laporan',
@@ -107,20 +74,20 @@ export default {
           ${pemilihBulan()}
         </div>
 
-        <div class="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-          ${kartuAngka('Kehadiran', r.hadir, `hari hadir dari ${hariMungkin} hari kerja`, 'text-emerald-600')}
+        <div class="mt-5 grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-4">
+          ${kartuAngka('Kehadiran', r.hadir, `hari hadir dari ${hariMungkin} hari kerja`, 'text-emerald-800')}
           ${kartuAngka(
             'Keterlambatan',
             r.telat,
             r.telat_menit > 0 ? `total ${r.telat_menit} menit` : 'tidak ada',
-            r.telat > 0 ? 'text-amber-600' : 'text-ink',
+            r.telat > 0 ? 'text-amber-800' : 'text-ink',
           )}
           ${kartuAngka('Izin & cuti', r.izin, 'hari yang sudah disetujui')}
           ${kartuAngka(
             'Tanpa catatan',
             r.alpha,
             r.alpha > 0 ? 'perlu ditanyakan ke anak magangnya' : 'tidak ada',
-            r.alpha > 0 ? 'text-rose-600' : 'text-ink',
+            r.alpha > 0 ? 'text-rose-800' : 'text-ink',
           )}
         </div>
 
@@ -132,7 +99,13 @@ export default {
             </div>
             <button type="button" data-unduh class="${TOMBOL_HALUS} ml-auto">Unduh CSV</button>
           </div>
-          ${tabel({ kolom: kolomRekap(), baris: rekap.data, kosong: 'Belum ada data pada bulan ini.' })}
+          ${tabel({
+            judul: 'Rekap absen bulanan',
+            kolom: kolomRekap(),
+            baris: rekap.data,
+            kosong: 'Belum ada data pada bulan ini.',
+            kartu: kartuRekap,
+          })}
         </div>`;
 
       const p = elPemilih();
@@ -147,7 +120,7 @@ export default {
           judul: 'Anak magang',
           sel: (u) => `
             <div class="flex items-center gap-3">
-              <span class="grid size-9 shrink-0 place-items-center rounded-full bg-merek/12 text-xs font-semibold text-merek">
+              <span class="grid size-9 shrink-0 place-items-center rounded-full bg-merek/12 text-xs font-semibold text-merek-gelap">
                 ${esc(inisial(u.nama))}
               </span>
               <span class="min-w-0 leading-tight">
@@ -166,7 +139,7 @@ export default {
             if (!u.luar) return '<span class="text-muted">—</span>';
             return `<span class="tabular-nums text-ink">${u.luar}×</span>${
               u.luar_kasar
-                ? `<span class="mt-0.5 block text-xs font-medium text-amber-700">${u.luar_kasar} GPS kasar</span>`
+                ? `<span class="mt-0.5 block text-xs font-medium text-amber-800">${u.luar_kasar} GPS kasar</span>`
                 : ''
             }`;
           },
@@ -178,7 +151,7 @@ export default {
           sel: (u) =>
             u.telat === 0
               ? '<span class="text-muted">—</span>'
-              : `<span class="tabular-nums text-amber-700">${u.telat}× · ${u.telat_menit} m</span>`,
+              : `<span class="tabular-nums text-amber-800">${u.telat}× · ${u.telat_menit} menit</span>`,
         },
         {
           judul: 'Izin',
@@ -196,14 +169,49 @@ export default {
           sel: (u) =>
             u.alpha === 0
               ? '<span class="text-muted">—</span>'
-              : `<span class="font-medium tabular-nums text-rose-600">${u.alpha}</span>`,
+              : `<span class="font-medium tabular-nums text-rose-800">${u.alpha}</span>`,
         },
         {
           judul: '',
           kelas: 'text-right',
-          sel: (u) => `<button type="button" data-detail="${u.pengguna_id}" class="${TOMBOL_BARIS} text-merek">Lihat</button>`,
+          sel: (u) => `<button type="button" data-detail="${u.pengguna_id}" class="${TOMBOL_BARIS} text-merek-gelap">Lihat</button>`,
         },
       ];
+    }
+
+    function kartuRekap(u) {
+      const izin = u.izin + u.cuti + u.sakit;
+      const angka = (label, nilai, kelas = 'text-ink') => `
+        <div>
+          <p class="text-[0.65rem] font-medium tracking-wide text-muted uppercase">${label}</p>
+          <p class="angka-rata mt-0.5 text-lg font-semibold ${kelas}">${nilai}</p>
+        </div>`;
+
+      return `
+        <li class="rounded-2xl border border-ink/8 bg-ink/4 p-4">
+          <div class="flex items-start gap-3">
+            <span class="grid size-10 shrink-0 place-items-center rounded-full bg-merek/12 text-xs font-semibold text-merek-gelap">
+              ${esc(inisial(u.nama))}
+            </span>
+            <span class="min-w-0 flex-1 leading-tight">
+              <span class="block truncate font-medium text-ink">
+                ${esc(u.nama)}${u.aktif ? '' : ' <span class="text-xs font-normal text-muted">(nonaktif)</span>'}
+              </span>
+              <span class="mt-0.5 block truncate text-xs text-muted">${esc(u.nip)} · ${esc(u.shift)}</span>
+              ${u.luar ? `<span class="mt-1 block text-xs font-medium text-amber-800">${u.luar}× dinas luar${u.luar_kasar ? ` · ${u.luar_kasar} GPS kasar` : ''}</span>` : ''}
+            </span>
+            <button type="button" data-detail="${u.pengguna_id}" class="${TOMBOL_BARIS} -mr-2 -mt-1 text-merek-gelap">
+              Lihat
+            </button>
+          </div>
+
+          <div class="mt-3 grid grid-cols-4 gap-2 rounded-xl bg-ink/4 px-3 py-2.5 text-center ring-1 ring-ink/6">
+            ${angka('Hadir', u.hadir, 'text-emerald-800')}
+            ${angka('Telat', u.telat, u.telat > 0 ? 'text-amber-800' : 'text-ink')}
+            ${angka('Izin', izin)}
+            ${angka('Tanpa', u.alpha, u.alpha > 0 ? 'text-rose-800' : 'text-ink')}
+          </div>
+        </li>`;
     }
 
     // ── Rincian satu orang ────────────────────────────────────────────────────
@@ -237,20 +245,20 @@ export default {
           </div>
         </div>
 
-        <div class="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-          ${kartuAngka('Hadir', hadir, `dari ${hari.filter((h) => h.status !== 'libur' && h.status !== 'belum').length} hari kerja`, 'text-emerald-600')}
+        <div class="mt-5 grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-4">
+          ${kartuAngka('Hadir', hadir, `dari ${hari.filter((h) => h.status !== 'libur' && h.status !== 'belum').length} hari kerja`, 'text-emerald-800')}
           ${kartuAngka(
             'Terlambat',
             hitung('telat'),
             telatMenit > 0 ? `total ${telatMenit} menit` : 'tidak ada',
-            hitung('telat') > 0 ? 'text-amber-600' : 'text-ink',
+            hitung('telat') > 0 ? 'text-amber-800' : 'text-ink',
           )}
           ${kartuAngka('Izin & cuti', hitung('izin') + hitung('cuti') + hitung('sakit'), 'hari yang sudah disetujui')}
           ${kartuAngka(
             'Tanpa catatan',
             hitung('alpha'),
             hitung('alpha') > 0 ? 'perlu ditanyakan' : 'tidak ada',
-            hitung('alpha') > 0 ? 'text-rose-600' : 'text-ink',
+            hitung('alpha') > 0 ? 'text-rose-800' : 'text-ink',
           )}
         </div>
 
@@ -267,14 +275,20 @@ export default {
                    © OpenStreetMap contributors.
                    ${
                      luarKasar.length > 0
-                       ? `<span class="mt-1 block font-medium text-amber-700">${luarKasar.length} di antaranya berakurasi kasar — buka Peta untuk memeriksa titiknya.</span>`
+                       ? `<span class="mt-1 block font-medium text-amber-800">${luarKasar.length} di antaranya tanpa akurasi atau berakurasi kasar — buka Peta untuk memeriksa titiknya.</span>`
                        : ''
                    }
                  </div>`
               : ''
           }
 
-          ${tabel({ kolom: kolomHarian(), baris: hari, kosong: 'Belum ada catatan pada bulan ini.' })}
+          ${tabel({
+            judul: 'Rincian absen harian',
+            kolom: kolomHarian(),
+            baris: hari,
+            kosong: 'Belum ada catatan pada bulan ini.',
+            kartu: kartuHarian,
+          })}
         </div>`;
     }
 
@@ -371,41 +385,42 @@ export default {
         return;
       }
 
-      if (e.target.closest('[data-unduh]')) unduh();
+      if (e.target.closest('[data-unduh]')) unduh(e.target.closest('[data-unduh]'));
     });
 
-    async function unduh() {
-      if (!rekap) return;
+    async function unduh(tombol) {
+      if (!tombol || tombol.disabled) return;
+
+      // Matriks butuh status tiap hari, dan itu hanya dikirim server kalau
+      // diminta lewat `rinci=1`. Layar rekap sengaja tidak memuatnya supaya
+      // balasan bulanan tetap ringan; unduhan mengambil sekali lagi.
+      const teksAsli = tombol.textContent;
+      tombol.disabled = true;
+      tombol.textContent = 'Menyiapkan…';
 
       try {
-        unduhCSV(
-          `rekap-absen-${bulan}.csv`,
-          ['NIP', 'Nama', 'Divisi', 'NIK', 'Shift', 'Dinas luar', 'Dinas luar GPS kasar', 'Hadir', 'Terlambat', 'Menit terlambat', 'Izin', 'Cuti', 'Sakit', 'Tanpa catatan'],
-          rekap.data.map((u) => [
-            u.nip,
-            u.nama,
-            u.divisi,
-            u.nik,
-            u.shift,
-            u.luar ?? 0,
-            u.luar_kasar ?? 0,
-            u.hadir,
-            u.telat,
-            u.telat_menit,
-            u.izin,
-            u.cuti,
-            u.sakit,
-            u.alpha,
-          ]),
+        const lengkap = await api.get(
+          `/admin/laporan?bulan=${encodeURIComponent(bulan)}&rinci=1`,
         );
-      } catch {
+        const baris = susunMatriksCSV({
+          laporan: lengkap,
+          admin: pengguna()?.nama ?? '',
+        });
+
+        unduhCSV(`rekap-absen-${bulan}.csv`, baris[0], baris.slice(1));
+      } catch (galat) {
         // Peramban bisa menolak mengunduh, dan itu bukan alasan menampilkan
         // layar galat. Yang perlu diketahui admin cuma bahwa berkasnya tidak
-        // jadi tersimpan.
+        // jadi tersimpan — termasuk kalau pengambilan rinciannya gagal.
         await beritahu({
           judul: 'Berkas tidak bisa diunduh',
-          pesan: 'Peramban menolak mengunduh berkasnya. Coba lagi atau periksa izin unduhan di peramban Anda.',
+          pesan:
+            galat.message ||
+            'Peramban menolak mengunduh berkasnya. Coba lagi atau periksa izin unduhan di peramban Anda.',
         });
+      } finally {
+        tombol.disabled = false;
+        tombol.textContent = teksAsli;
       }
     }
 

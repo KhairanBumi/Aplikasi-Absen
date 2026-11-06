@@ -64,8 +64,8 @@ export default {
         kelas: 'text-right',
         sel: (s) => `
           <div class="flex justify-end gap-1">
-            <button type="button" data-ubah="${s.id}" class="${TOMBOL_BARIS} text-merek">Ubah</button>
-            <button type="button" data-hapus="${s.id}" class="${TOMBOL_BARIS} text-rose-600">Hapus</button>
+            <button type="button" data-ubah="${s.id}" class="${TOMBOL_BARIS} text-merek-gelap">Ubah</button>
+            <button type="button" data-hapus="${s.id}" class="${TOMBOL_BARIS} text-rose-800">Hapus</button>
           </div>`,
       },
     ];
@@ -73,6 +73,7 @@ export default {
     function gambar() {
       elJumlah.textContent = `${semua.length} shift`;
       kotakDaftar.innerHTML = tabel({
+        judul: 'Daftar shift kerja',
         kolom,
         baris: semua,
         kosong: 'Belum ada shift. Tanpa shift, tidak ada yang bisa dinilai telat.',
