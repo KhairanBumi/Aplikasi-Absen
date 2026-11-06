@@ -43,6 +43,7 @@ Route::middleware(['auth.token', 'admin'])->prefix('admin')->group(function () {
     Route::get('/magang', [AdminMagangController::class, 'index']);
     Route::post('/magang', [AdminMagangController::class, 'store']);
     Route::put('/magang/{id}', [AdminMagangController::class, 'update']);
+    Route::delete('/magang/{id}', [AdminMagangController::class, 'destroy'])->whereNumber('id');
 
     Route::get('/lokasi', [AdminDataController::class, 'lokasi']);
     Route::post('/lokasi', [AdminDataController::class, 'storeLokasi']);

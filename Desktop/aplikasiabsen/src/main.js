@@ -2,11 +2,50 @@ import './style.css';
 import { pengguna, segarkanSesi } from './api.js';
 import { pasangLatar } from './latar.js';
 import { semuaButir } from './menu.js';
-import { animasiHalaman } from './animasi.js';
+import { animasiHalaman, pengamatMuncul } from './animasi.js';
+import { gagalPemuat, selesaikanPemuat } from './pemuat.js';
+
+// Inter baru diminta setelah modul ini berjalan. Stylesheet lintas-origin di
+// <head> menahan paint pertama, dan splash justru perlu tampil sebelum itu.
+// Display swap membuat teks memakai font sistem sampai Inter siap.
+const fontInter = document.createElement('link');
+fontInter.rel = 'stylesheet';
+fontInter.href =
+  'https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap';
+document.head.append(fontInter);
 
 // Latar Feral dipasang lebih dulu supaya kaca di layar pertama sudah punya
 // sesuatu untuk dibiaskan sejak frame pertama.
 pasangLatar();
+
+// Garis tipis di tepi atas: satu-satunya petunjuk posisi gulir yang tidak
+// menambah elemen di dalam kartu. Tidak mencuri klik dan tidak masuk pohon
+// aksesibilitas.
+const progresGulir = document.createElement('div');
+progresGulir.className = 'pointer-events-none fixed inset-x-0 top-0 z-[60] h-0.5';
+progresGulir.setAttribute('aria-hidden', 'true');
+progresGulir.innerHTML =
+  '<div data-progres-gulir class="h-full origin-left scale-x-0 bg-merek/75 transition-transform duration-150 ease-apple"></div>';
+document.body.appendChild(progresGulir);
+
+const isiProgres = progresGulir.querySelector('[data-progres-gulir]');
+let gulirBerikut = null;
+
+function gambarProgres() {
+  gulirBerikut = null;
+  const tinggi = document.documentElement.scrollHeight - window.innerHeight;
+  const persen = tinggi > 0 ? Math.min(1, Math.max(0, window.scrollY / tinggi)) : 0;
+  isiProgres.style.transform = `scaleX(${persen})`;
+}
+
+function mintaProgres() {
+  if (gulirBerikut) return;
+  gulirBerikut = requestAnimationFrame(gambarProgres);
+}
+
+addEventListener('scroll', mintaProgres, { passive: true });
+addEventListener('resize', mintaProgres);
+gambarProgres();
 
 // Layar yang punya berkas sendiri. Menu yang belum punya layar memakai berkas
 // bersama `segera.js`, jadi tidak ada tautan menu yang menabrak.
@@ -40,8 +79,14 @@ for (const b of semuaButir()) {
 
 const AKAR = document.getElementById('akar');
 let bersihkan = null;
+let bersihkanMuncul = null;
 let urutan = 0;
 let pertama = true;
+
+// Hash router tidak punya posisi gulir sendiri seperti halaman biasa. Tanpa
+// ini, membuka menu di bagian bawah sidebar bisa mewarisi posisi gulir layar
+// sebelumnya.
+if ('scrollRestoration' in history) history.scrollRestoration = 'manual';
 
 /**
  * Halaman pertama setelah masuk.
@@ -94,30 +139,51 @@ async function buka() {
 
   bersihkan?.();
   bersihkan = null;
+  bersihkanMuncul?.();
+  bersihkanMuncul = null;
 
+  const muatPertama = pertama;
   document.title = view.judul ? `${view.judul} — Aplikasi Absen` : 'Aplikasi Absen';
   AKAR.replaceChildren();
   bersihkan = view.mount(AKAR) ?? null;
+  bersihkanMuncul = pengamatMuncul(AKAR);
   // Muat pertama tidak memindahkan fokus: Tab pertama harus sampai ke tautan
   // "Lewati ke isi utama". Setelah pindah menu, fokus pindah ke isi supaya
   // pembaca layar mengumumkan halaman baru, bukan tetap di menu yang ditekan.
-  if (!pertama) AKAR.querySelector('#isi-utama')?.focus({ preventScroll: true });
+  if (!muatPertama) AKAR.querySelector('#isi-utama')?.focus({ preventScroll: true });
   pertama = false;
+  // Setiap rute dimulai dari atas. Fokus memakai preventScroll supaya pembaca
+  // layar tetap mendapat konteks halaman baru tanpa mengembalikan posisi lama.
+  window.scrollTo({ top: 0, left: 0, behavior: 'auto' });
+  mintaProgres();
   animasiHalaman(AKAR);
+  if (muatPertama) selesaikanPemuat();
 }
 
-addEventListener('hashchange', buka);
+addEventListener('hashchange', () => {
+  buka().catch((galat) => {
+    console.error('Gagal membuka halaman:', galat);
+    gagalPemuat();
+  });
+});
 
 // Sesi yang tersimpan bisa sudah tidak cocok dengan server — data diri diubah,
 // atau akunnya dinonaktifkan. Diperiksa dulu sebelum layar pertama dipasang,
 // supaya yang tampil bukan salinan basi dari localStorage.
 (async () => {
   try {
-    await segarkanSesi();
-  } catch {
-    // Kegagalan jaringan bukan alasan mengeluarkan orang dari aplikasinya, dan
-    // juga bukan alasan berhenti di layar kosong. api.js yang memutuskan kapan
-    // sesi dihapus; sisa galat di sini cukup diabaikan.
+    try {
+      await segarkanSesi();
+    } catch {
+      // Kegagalan jaringan bukan alasan mengeluarkan orang dari aplikasinya, dan
+      // juga bukan alasan berhenti di layar kosong. api.js yang memutuskan kapan
+      // sesi dihapus; sisa galat di sini cukup diabaikan.
+    }
+    await buka();
+  } catch (galat) {
+    // Jangan biarkan splash berputar selamanya saat impor rute gagal. Pengguna
+    // diberi keadaan galat dengan tombol muat ulang.
+    console.error('Gagal memuat aplikasi:', galat);
+    gagalPemuat();
   }
-  buka();
 })();

@@ -37,12 +37,14 @@
 
 /* ------------------------------------------------------------------ bahan */
 
-/* Kaca. Blur saja tidak cukup — tanpa `saturate` latar berwarna di belakangnya
-   ikut kelabu dan bahannya terlihat seperti plastik susu, bukan kaca.
+/* Kaca chrome: sidebar, header, pil kiosk, dan kartu login. Blur saja tidak
+   cukup — tanpa `saturate` latar berwarna di belakangnya ikut kelabu dan
+   bahannya terlihat seperti plastik susu, bukan kaca.
 
-   Opasitasnya sengaja 0.62, bukan 0.15 seperti resep glassmorphism umum.
-   Di 0.15 teks `muted` jatuh ke sekitar 2.6:1 dan tidak terbaca; di 0.62 masih
-   4.7:1. Ini yang dimaksud basis data desain dengan "risk: conditional". */
+   Opasitasnya sengaja 0.62 supaya gradasi Feral masih terbaca di baliknya.
+   Konsekuensinya teks sekunder di atas bahan ini WAJIB memakai `text-ink/70`,
+   bukan `text-muted`: di atas orb teal, muted hanya ~3.0:1 sedangkan ink/70
+   ~4.8:1. Blok @supports di bawah menaikkan opasitas bila blur tidak tersedia. */
 @utility kaca {
   background-color: rgb(255 255 255 / 0.62);
   -webkit-backdrop-filter: blur(24px) saturate(180%);
@@ -54,13 +56,48 @@
     0 20px 44px -24px rgb(29 29 31 / 0.3);
 }
 
-/* Versi lebih pekat untuk permukaan yang di atasnya ada teks panjang atau
-   keputusan penting (dialog). Blur dinaikkan, bukan opasitasnya saja, supaya
-   tepinya tetap terlihat seperti kaca dan bukan kertas putih. */
+/* Kaca ringan untuk kartu ringkasan: KPI dan navigasi tanggal. Isinya pendek
+   dan jumlahnya paling banyak empat per layar, jadi blur sepadan dengan
+   biayanya. Teks sekunder di sini juga `text-ink/70`.
+   Blur dijaga 18px; jangan dipakai untuk tabel besar. */
+@utility kaca-lembut {
+  background-color: rgb(255 255 255 / 0.7);
+  -webkit-backdrop-filter: blur(18px) saturate(160%);
+  backdrop-filter: blur(18px) saturate(160%);
+  border: 1px solid rgb(255 255 255 / 0.65);
+  box-shadow:
+    inset 0 1px 0 0 rgb(255 255 255 / 0.8),
+    0 1px 2px rgb(29 29 31 / 0.04),
+    0 18px 40px -26px rgb(29 29 31 / 0.26);
+}
+
+/* Permukaan kartu layar data. Sekarang benar-benar kaca, sama seperti
+   navigasi: gradasi Feral di belakangnya ikut tembus dan ikut mewarnai
+   kartu, bukan lagi kertas putih yang menutupi wallpaper.
+
+   Tanpa `backdrop-filter` — kartu ini membungkus tabel besar, dan setiap
+   permukaan yang diblur menambah satu akar backdrop. Wallpaper-nya sendiri
+   sudah diblur 64px di latar.js, jadi yang perlu lewat lewat hanyalah
+   warnanya; teks dan angka tetap tajam karena tidak ada yang di-blur.
+
+   0.72 dipilih karena di atas orb teal (latar tergelap di aplikasi ini)
+   teks ink/70 masih 5.2:1, sedangkan 0.62 hanya menyisakan ~4.2:1. */
+@utility kaca-kartu {
+  background-color: rgb(255 255 255 / 0.72);
+  border: 1px solid rgb(255 255 255 / 0.65);
+  box-shadow:
+    inset 0 1px 0 0 rgb(255 255 255 / 0.8),
+    0 1px 2px rgb(29 29 31 / 0.04),
+    0 20px 44px -24px rgb(29 29 31 / 0.3);
+}
+
+/* Dialog dan menu seluler. Blur dinaikkan, bukan opasitasnya saja, supaya
+   tepinya tetap terlihat seperti kaca dan bukan kertas putih. 0.92 dipilih
+   karena pada 0.9 `muted` di atas orb teal masih ~4.47:1 — terlalu mepet. */
 @utility kaca-tebal {
-  background-color: rgb(255 255 255 / 0.86);
-  -webkit-backdrop-filter: blur(40px) saturate(180%);
-  backdrop-filter: blur(40px) saturate(180%);
+  background-color: rgb(255 255 255 / 0.92);
+  -webkit-backdrop-filter: blur(36px) saturate(180%);
+  backdrop-filter: blur(36px) saturate(180%);
   border: 1px solid rgb(255 255 255 / 0.8);
   box-shadow:
     inset 0 1px 0 0 rgb(255 255 255 / 0.9),
@@ -68,12 +105,69 @@
     0 28px 60px -24px rgb(29 29 31 / 0.34);
 }
 
+/* Peramban tanpa backdrop-filter tidak bisa memblur latar; tanpa ini kaca
+   0.62 akan menampilkan orb tajam di belakang teks. Opasitas dinaikkan, efek
+   kaca dilepas — keterbacaan lebih penting daripada tekstur. */
+@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  .kaca {
+    background-color: rgb(255 255 255 / 0.92);
+  }
+
+  .kaca-lembut {
+    background-color: rgb(255 255 255 / 0.95);
+  }
+
+  .kaca-kartu {
+    background-color: rgb(255 255 255 / 0.95);
+  }
+
+  .kaca-tebal {
+    background-color: rgb(255 255 255 / 0.97);
+  }
+}
+
+/* --------------------------------------------------------------- teks dasar */
+
+/* Teks sekunder di dalam aplikasi bukan lagi `muted` (#6e6e73). Di atas orb
+   teal, warna itu hanya menyisakan ~3:1 — jauh di bawah ambang 4.5:1 untuk
+   teks kecil. `ink@70` memberi 4.8:1 di atas kaca chrome dan 5.2:1 di atas
+   panel kartu, jadi nilainya yang diganti, bukan tiap penanda teksnya.
+
+   Variabelnya diwarisi ke seluruh isi, jadi satu aturan ini cukup untuk
+   seluruh kaca — termasuk yang berdiri sendiri di layar login dan kiosk. */
+.kaca,
+.kaca-lembut,
+.kaca-kartu,
+.kaca-tebal,
+.area-kaca {
+  --color-muted: rgb(29 29 31 / 0.7);
+}
+
 /* ------------------------------------------------------------------ dasar */
 
 @layer base {
+  html {
+    scrollbar-width: thin;
+    scrollbar-color: rgb(29 29 31 / 0.16) transparent;
+  }
+
+  html::-webkit-scrollbar {
+    width: 8px;
+  }
+
+  html::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  html::-webkit-scrollbar-thumb {
+    background-color: rgb(29 29 31 / 0.16);
+    border-radius: 9999px;
+  }
+
   body {
     color: var(--color-ink);
-    background-color: #ebf6f7;
+    /* Body transparan: lihat aturan `html body` di luar @layer. Warna
+       cadangan ada di html (index.html) dan di #pemuat-awal. */
     font-family: var(--font-sans);
     -webkit-font-smoothing: antialiased;
     text-rendering: optimizeLegibility;
@@ -142,6 +236,18 @@
   }
 }
 
+/* Latar Feral adalah lapisan `position: fixed` ber-z-index -1. Body yang opak
+   dicat SESUDAH lapisan negatif itu, jadi seluruh gradasi tertutup walaupun
+   kanvasnya menggambar dengan benar. Warna cadangan tetap di html (dan di
+   #pemuat-awal); body harus transparan supaya kanvas terlihat.
+
+   Aturan ini sengaja di luar @layer: <style> pemuat di index.html memuat
+   `body { background-color: #ebf6f7 }` tanpa layer, dan aturan berlayer kalah
+   olehnya. `html body` menjaga urutan menang tanpa menyentuh berkas pemuat. */
+html body {
+  background-color: transparent;
+}
+
 /* ------------------------------------------------------------------ dialog */
 
 /* Hanya selubung gelap, tanpa blur. Memberi `backdrop-filter` di sini membuat
@@ -161,4 +267,159 @@ dialog[open] {
     opacity: 0;
     transform: scale(0.96) translateY(8px);
   }
+}
+
+/* Menu seluler masuk dari kiri, bukan mengecil dari tengah. Panel ini bukan
+   dialog keputusan, jadi geraknya harus terbaca sebagai navigasi. */
+.menu-seluler[open] {
+  animation: menu-masuk 240ms var(--ease-apple);
+}
+
+@keyframes menu-masuk {
+  from {
+    opacity: 0;
+    transform: translateX(-100%);
+  }
+}
+
+/* Scrollbar tipis yang menyatu dengan kaca. Trek dan ibu jari sengaja
+   transparan saat diam supaya tidak muncul sebagai pita abu-abu di atas
+   gradasi; batangnya baru terlihat saat penunjuk berada di atas panel. */
+.scroll-samping {
+  scrollbar-width: thin;
+  scrollbar-color: transparent transparent;
+}
+
+.scroll-samping::-webkit-scrollbar {
+  width: 5px;
+  height: 5px;
+}
+
+.scroll-samping::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.scroll-samping::-webkit-scrollbar-thumb {
+  background-color: transparent;
+  border-radius: 9999px;
+}
+
+.scroll-samping:hover,
+.scroll-samping:focus-within {
+  scrollbar-color: rgb(29 29 31 / 0.22) transparent;
+}
+
+.scroll-samping:hover::-webkit-scrollbar-thumb,
+.scroll-samping:focus-within::-webkit-scrollbar-thumb {
+  background-color: rgb(29 29 31 / 0.22);
+}
+
+/* Tabel yang berubah menjadi kartu di ponsel. Header tetap ada untuk pembaca
+   layar, tetapi tidak memakan ruang visual. */
+@media (hover: hover) and (pointer: fine) {
+  .kartu-angka {
+    transition: box-shadow 240ms var(--ease-apple);
+  }
+
+  .kartu-angka:hover {
+    box-shadow: var(--shadow-naik-besar);
+  }
+}
+
+@media (max-width: 767px) {
+  .tabel-responsif {
+    overflow: visible;
+  }
+
+  .tabel-responsif table {
+    display: block;
+    width: 100%;
+    min-width: 0;
+  }
+
+  .tabel-responsif thead {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border: 0;
+  }
+
+  .tabel-responsif tbody {
+    display: grid;
+    gap: 0.75rem;
+  }
+
+  .tabel-responsif tr {
+    display: block;
+    padding: 0.85rem 1rem;
+    border: 1px solid rgb(29 29 31 / 0.08);
+    border-radius: 1rem;
+    background: rgb(255 255 255 / 0.55);
+  }
+
+  .tabel-responsif tr[data-kosong] {
+    padding: 0;
+    border: 0;
+    background: transparent;
+  }
+
+  .tabel-responsif td {
+    display: grid;
+    grid-template-columns: 6.75rem minmax(0, 1fr);
+    gap: 0.75rem;
+    align-items: start;
+    padding: 0.35rem 0;
+    border: 0;
+  }
+
+  .tabel-responsif .label-sel {
+    display: block;
+    padding-top: 0.15rem;
+    color: var(--color-muted);
+    font-size: 0.75rem;
+    font-weight: 500;
+    line-height: 1.3;
+  }
+
+  .tabel-responsif .label-sel:empty {
+    display: none;
+  }
+
+  .tabel-responsif td:has(.label-sel:empty) {
+    display: flex;
+    justify-content: flex-end;
+    padding-top: 0.6rem;
+  }
+
+  .tabel-responsif tr[data-kosong] td {
+    display: block;
+    padding: 0.5rem 0;
+    text-align: center;
+  }
+
+  .tabel-responsif tr[data-kosong] .label-sel {
+    display: none;
+  }
+
+  .tabel-responsif td:first-child {
+    display: block;
+    padding: 0.1rem 0 0.65rem;
+    margin-bottom: 0.15rem;
+    border-bottom: 1px solid rgb(29 29 31 / 0.06);
+  }
+
+  .tabel-responsif td:first-child .label-sel {
+    display: none;
+  }
+}
+
+/* Label kartu hanya untuk mata; pembaca layar memakai header tabel yang
+   tetap ada di pohon aksesibilitas. */
+.label-sel {
+  display: none;
 }

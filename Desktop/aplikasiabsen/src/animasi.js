@@ -6,7 +6,7 @@
 // dihentikan saat layar ditinggalkan. Animasi yang masih berjalan di elemen
 // yang sudah dilepas memang tidak terlihat, tapi tetap memegang referensi.
 
-import { animate, stagger } from 'motion';
+import { animate } from 'motion';
 
 const EASE = [0.22, 1, 0.36, 1]; // sama dengan --ease-apple di style.css
 
@@ -67,9 +67,13 @@ export function panggung() {
   return {
     muncul,
     hitung,
-    /** Muncul berurutan untuk sederet elemen. */
-    beruntun(elemen, { jarak = 0.06, ...opsi } = {}) {
-      return muncul(elemen, { ...opsi, delay: stagger(jarak, { startDelay: opsi.delay ?? 0 }) });
+    /** Muncul berurutan untuk sederet elemen, dibatasi agar daftar panjang
+     *  tidak membuat baris terakhir baru muncul setelah beberapa detik. */
+    beruntun(elemen, { jarak = 0.05, maks = 10, ...opsi } = {}) {
+      const daftar = [...elemen].slice(0, maks);
+      daftar.forEach((el, i) => {
+        muncul(el, { ...opsi, delay: (opsi.delay ?? 0) + i * jarak });
+      });
     },
     berhenti() {
       for (const kontrol of berjalan) kontrol.stop();
@@ -82,17 +86,96 @@ export function panggung() {
 let kontrolHalaman = null;
 
 export function animasiHalaman(akar) {
+  // Kontrol lama harus berhenti walau pengguna meminta gerak dikurangi;
+  // kalau tidak, animasi rute sebelumnya bisa menahan elemen yang sudah lepas.
+  kontrolHalaman?.stop();
+  kontrolHalaman = null;
+
   if (!akar || kurangiGerak()) return;
 
-  kontrolHalaman?.stop();
   const isi = akar.querySelector('[data-isi]') ?? akar.firstElementChild;
   if (!isi) return;
 
   kontrolHalaman = animate(
     isi,
-    { opacity: [0, 1], y: [8, 0] },
-    { duration: 0.34, ease: EASE },
+    { opacity: [0, 1], y: [10, 0] },
+    { duration: 0.3, ease: EASE },
   );
+}
+
+/**
+ * Animasi muncul saat elemen masuk viewport.
+ *
+ * MutationObserver dipakai karena hampir semua layar menggambar ulang isinya
+ * setelah data datang. Dengan begitu kartu yang baru dibuat tetap ikut
+ * diamati tanpa setiap layar harus memanggil animasi sendiri.
+ */
+export function pengamatMuncul(akar) {
+  if (!akar || kurangiGerak()) return () => {};
+
+  const sudah = new WeakSet();
+  const kontrol = new Set();
+  let aktif = true;
+
+  const pengamat = new IntersectionObserver(
+    (entri) => {
+      for (const entriIni of entri) {
+        if (!entriIni.isIntersecting) continue;
+        pengamat.unobserve(entriIni.target);
+
+        const el = entriIni.target;
+        if (!aktif || !el.isConnected) continue;
+
+        const urut = Number(el.dataset.munculUrut ?? 0);
+        const animasi = animate(
+          el,
+          { opacity: [0, 1], y: [18, 0] },
+          { duration: 0.52, delay: Math.min(0.2, urut * 0.035), ease: EASE },
+        );
+        kontrol.add(animasi);
+        animasi.finished
+          .then(() => kontrol.delete(animasi))
+          .catch(() => kontrol.delete(animasi));
+      }
+    },
+    { rootMargin: '0px 0px -8% 0px', threshold: 0.06 },
+  );
+
+  function amati() {
+    if (!aktif) return;
+
+    akar.querySelectorAll('.kaca-kartu, .kaca-lembut, [data-muncul]').forEach((el, i) => {
+      if (sudah.has(el) || el.closest('[data-animasi-manual], [data-menu]')) return;
+      // Jangan menyembunyikan elemen yang sedang tidak ditampilkan; IO tidak
+      // akan pernah memanggilnya sampai media query berubah.
+      if (!el.getClientRects().length) return;
+
+      sudah.add(el);
+      el.dataset.munculUrut = String(i % 6);
+      el.style.opacity = '0';
+      el.style.transform = 'translateY(18px)';
+      pengamat.observe(el);
+    });
+  }
+
+  const mutasi = new MutationObserver(amati);
+  mutasi.observe(akar, { childList: true, subtree: true });
+  amati();
+
+  return () => {
+    aktif = false;
+    pengamat.disconnect();
+    mutasi.disconnect();
+    for (const animasi of kontrol) animasi.stop();
+    kontrol.clear();
+    // Elemen yang belum sempat masuk viewport tidak boleh tertinggal transparan.
+    akar.querySelectorAll('.kaca-kartu, .kaca-lembut, [data-muncul]').forEach((el) => {
+      if (el.style.opacity === '0') {
+        el.style.opacity = '';
+        el.style.transform = '';
+      }
+    });
+  };
 }
 
 /** Animasi sekali pakai untuk elemen yang tidak perlu dilacak. */

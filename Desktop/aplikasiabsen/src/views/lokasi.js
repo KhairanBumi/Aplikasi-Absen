@@ -48,13 +48,13 @@ export default {
         judul: 'Titik kantor',
         sel: (l) => {
           if (!Number.isFinite(l.lintang) || !Number.isFinite(l.bujur)) {
-            return `<span class="text-xs font-medium text-amber-700">Belum diatur</span>`;
+            return `<span class="text-xs font-medium text-amber-800">Belum diatur</span>`;
           }
           return `
             <a href="https://www.openstreetmap.org/?mlat=${l.lintang}&mlon=${l.bujur}#map=18/${l.lintang}/${l.bujur}"
                target="_blank" rel="noopener"
                title="Buka titik kantor di OpenStreetMap"
-               class="block font-mono text-xs text-merek underline-offset-2 hover:underline">
+               class="block font-mono text-xs text-merek-gelap underline-offset-2 hover:underline">
               ${l.lintang}, ${l.bujur}
             </a>
             <span class="mt-0.5 block text-xs text-muted">Radius ${l.radius_m ?? 250} m</span>`;
@@ -69,7 +69,7 @@ export default {
         judul: '',
         kelas: 'text-right',
         sel: (l) => `
-          <button type="button" data-ubah="${l.id}" class="${TOMBOL_BARIS} text-merek">Ubah</button>`,
+          <button type="button" data-ubah="${l.id}" class="${TOMBOL_BARIS} text-merek-gelap">Ubah</button>`,
       },
     ];
 

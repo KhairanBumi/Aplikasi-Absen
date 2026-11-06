@@ -1468,11 +1468,13 @@ async function tanggapiAsli(metode, jalur, dataKirim, token) {
   //
   // Empat layar data master memakai pola yang sama: daftar, tambah, ubah.
   //
-  // Magang dan lokasi sengaja TIDAK punya endpoint hapus. Keduanya dirujuk
-  // oleh baris absen yang sudah terjadi: menghapus "Gudang Cikarang" membuat
-  // absen orang yang bekerja di sana kehilangan tempatnya, dan menghapus
-  // magang membuat riwayat kehadirannya menggantung. Menutup lokasi atau
-  // memberhentikan orang berarti menonaktifkannya.
+  // Lokasi sengaja TIDAK punya endpoint hapus: menghapus "Gudang Cikarang"
+  // membuat absen orang yang bekerja di sana kehilangan tempatnya. Menutup
+  // lokasi berarti menonaktifkannya.
+  //
+  // Magang boleh dihapus, tetapi penghapusannya harus utuh: absen, izin, dan
+  // sesinya ikut dibuang. Kalau hanya baris pengguna yang hilang, rekap akan
+  // menghitung orang yang tidak ada dan halaman riwayat kehilangan pemiliknya.
   //
   // Hari libur dan shift boleh dihapus, tapi syaratnya berbeda. Hari libur
   // tidak dirujuk siapa pun — dia cuma penanda tanggal, dan tanggal yang salah
@@ -1553,6 +1555,39 @@ async function tanggapiAsli(metode, jalur, dataKirim, token) {
       aktif: orang.aktif,
     });
     return tanpaRahasia(orang);
+  }
+
+  if (metode === 'DELETE' && idMagang) {
+    const aku = await adminSaja(token);
+    const indeks = toko.pengguna.findIndex((u) => u.id === Number(idMagang));
+    if (indeks === -1) throw galat('Magang tidak ditemukan.', 404);
+
+    const orang = toko.pengguna[indeks];
+    if (orang.id === aku.id) {
+      throw galat('Anda tidak bisa menghapus akun sendiri.', 422);
+    }
+
+    toko.absen = toko.absen.filter((a) => a.pengguna_id !== orang.id);
+    toko.izin = toko.izin.filter((z) => z.pengguna_id !== orang.id);
+    toko.sesi = toko.sesi.filter((s) => s.pengguna_id !== orang.id);
+
+    // Jejak audit tetap ada; yang dilepas hanya kaitan ke akun yang sudah
+    // tidak ada. Tindakan penghapusan sendiri dicatat setelah ini.
+    for (const a of toko.audit) {
+      if (a.pengguna_id === orang.id) a.pengguna_id = null;
+    }
+    for (const z of toko.izin) {
+      if (z.diputuskan_oleh === orang.id) z.diputuskan_oleh = null;
+    }
+
+    toko.pengguna.splice(indeks, 1);
+    catatAudit(aku, 'hapus_magang', {
+      pengguna_id: orang.id,
+      nip: orang.nip,
+      nama: orang.nama,
+    });
+
+    return { ok: true };
   }
 
   if (metode === 'GET' && tanpaKueri === '/admin/lokasi') {

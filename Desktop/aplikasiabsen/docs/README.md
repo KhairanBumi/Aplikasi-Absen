@@ -18,6 +18,7 @@ Status per **29 Oktober 2026**.
 | [M4 — Izin, riwayat, rekap & laporan](milestones/M4-izin-riwayat-laporan.md) | Pengajuan izin, persetujuan admin, riwayat magang, rekap bulanan, dan ekspor CSV. |
 | [M5 — Integrasi backend](milestones/M5-integrasi-backend.md) | Kecocokan frontend dengan backend, endpoint yang sudah ada, dan sisa Fase 2. |
 | [M6 — Hardening, QA & rilis](milestones/M6-hardening-rilis.md) | Keamanan produksi, pengujian menyeluruh, operasional, dan kesiapan rilis. |
+| [M7 — Redesign UI: gradasi Feral & hybrid glass](milestones/M7-redesign-ui-glass.md) | Token material kaca, hero beranda, kontras teks, latar Feral yang terlihat, keselarasan tepi bilah atas dengan kartu isi, dan verifikasi lintas viewport. |
 | [Daftar periksa rilis](RILIS.md) | Butir pra-rilis, rilis, pasca-rilis, rollback, dan tanda tangan persetujuan. |
 | [Template milestone](template-milestone.md) | Kerangka untuk menulis milestone atau tugas baru. |
 
@@ -31,9 +32,11 @@ Status per **29 Oktober 2026**.
 | M4 — Izin, riwayat, rekap & laporan | **Selesai (frontend)** | Seluruh endpoint backend sudah tersedia; verifikasi staging ada di M5. |
 | M5 — Integrasi backend | **Selesai** | Seluruh endpoint, tes backend, dan uji staging dengan `VITE_USE_MOCK=false` lulus. |
 | M6 — Hardening, QA & rilis | **Berjalan** | Kebijakan, CI, monitoring, backup, audit/anomali, aksesibilitas, dan uji beban lokal selesai. Uji perangkat kiosk, latihan pemulihan, header staging, dan tanda tangan rilis belum. |
+| M7 — Redesign UI: gradasi Feral & hybrid glass | **Selesai (frontend)** | Gradient terlihat, glass di chrome, kartu ringkasan, dan kartu isi section; tepi bilah atas sejajar dengan kartu. Verifikasi visual Chromium 360–1920 px dengan data mode tiruan; verifikasi admin dengan backend asli belum. |
 
 **Kesimpulan:** frontend sudah memuat seluruh layar dan alur sesuai
-`KONTRAK-API.md`, dan M5 sudah lulus uji staging. Aplikasi **belum siap
+`KONTRAK-API.md`, dan M5 sudah lulus uji staging. M7 menyelesaikan poles
+tampilan tanpa mengubah alur, data, atau kesiapan rilis. Aplikasi **belum siap
 produksi** karena butir rilis M6 yang tersisa — uji perangkat kiosk, latihan
 pemulihan, header staging, dan tanda tangan — belum selesai.
 
@@ -108,3 +111,5 @@ Backend ada di `backend/`; langkah instalasi dan seed ada di
 | 28 Oktober 2026 | Dokumentasi awal: PRD, M1–M6, dan template milestone. |
 | 28 Oktober 2026 | Endpoint Fase 2 selesai dan diregresi (138 tes, 991 assertion); status M3/M5 diperbarui. |
 | 28 Oktober 2026 | Uji staging M5 dengan `VITE_USE_MOCK=false` lulus; status M5 menjadi **Selesai**. |
+| 29 Oktober 2026 | M7 redesign UI ditambahkan: gradasi Feral terlihat (body transparan), token kaca/frost fill, hero beranda, dan kontras terukur. |
+| 29 Oktober 2026 | M7 direvisi: kartu isi section memakai kaca 0.72 (bukan fill putih), `muted` diganti `ink/70` di seluruh aplikasi, warna aksen disapu ke shade -800, dan tepi bilah atas diselaraskan dengan tepi kartu. Kontras diukur ulang dari piksel aktual pada 360–1920 px. |

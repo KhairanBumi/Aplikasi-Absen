@@ -5,7 +5,8 @@ import { KARTU, tabel, pesanGalat, TOMBOL_HALUS } from '../tabel.js';
 import { panggung } from '../animasi.js';
 
 const KELAS_TANGGAL =
-  'rounded-xl border border-ink/12 bg-white/75 px-3 py-2 text-sm text-ink outline-none focus:border-merek';
+  'rounded-xl border border-ink/12 bg-white/75 px-3 py-2 text-sm text-ink transition ' +
+  'focus:border-merek focus:ring-2 focus:ring-merek focus:outline-none';
 
 const LABEL_JENIS = {
   pin_salah_berulang: 'PIN salah berulang',
@@ -18,10 +19,12 @@ const LABEL_JENIS = {
 
 // Kelas ditulis utuh supaya ikut terdeteksi Tailwind saat memindai berkas.
 const WARNA_TINGKAT = {
-  tinggi: 'bg-rose-500/12 text-rose-700',
+  tinggi: 'bg-rose-500/12 text-rose-800',
   sedang: 'bg-amber-500/15 text-amber-800',
-  rendah: 'bg-ink/8 text-muted',
+  rendah: 'bg-ink/8 text-ink/70',
 };
+
+const LABEL_TINGKAT = { tinggi: 'Tinggi', sedang: 'Sedang', rendah: 'Rendah' };
 
 function tanggalISO(geserHari = 0) {
   return new Date(Date.now() + geserHari * 86_400_000).toLocaleDateString('en-CA', {
@@ -71,10 +74,16 @@ export default {
       },
       {
         judul: 'Jenis',
-        sel: (a) =>
-          `<span class="inline-flex rounded-full px-2.5 py-1 text-xs font-medium ${
-            WARNA_TINGKAT[a.tingkat] ?? WARNA_TINGKAT.rendah
-          }">${esc(LABEL_JENIS[a.jenis] ?? a.jenis)}</span>`,
+        sel: (a) => `<span class="font-medium text-ink">${esc(LABEL_JENIS[a.jenis] ?? a.jenis)}</span>`,
+      },
+      {
+        judul: 'Tingkat',
+        sel: (a) => {
+          const tingkat = a.tingkat ?? 'rendah';
+          return `<span class="inline-flex rounded-full px-2.5 py-1 text-xs font-medium ${
+            WARNA_TINGKAT[tingkat] ?? WARNA_TINGKAT.rendah
+          }">${esc(LABEL_TINGKAT[tingkat] ?? tingkat)}</span>`;
+        },
       },
       { judul: 'Keterangan', sel: (a) => `<span class="text-muted">${esc(a.keterangan)}</span>` },
     ];

@@ -102,8 +102,8 @@ export default {
         sel: (z) =>
           z.status === 'menunggu'
             ? `<div class="flex justify-end gap-1">
-                 <button type="button" data-tolak="${z.id}" class="${TOMBOL_BARIS} text-rose-600">Tolak</button>
-                 <button type="button" data-setujui="${z.id}" class="${TOMBOL_BARIS} text-emerald-700">Setujui</button>
+                 <button type="button" data-tolak="${z.id}" class="${TOMBOL_BARIS} text-rose-800">Tolak</button>
+                 <button type="button" data-setujui="${z.id}" class="${TOMBOL_BARIS} text-emerald-800">Setujui</button>
                </div>`
             : `<span class="block text-right text-xs text-muted">${esc(tanggal(z.diputuskan))}</span>`,
       },
@@ -115,7 +115,7 @@ export default {
         return `
           <button type="button" data-tab-kunci="${t.kunci}" class="${KELAS_TAB(aktif)}">
             ${esc(t.label)}
-            <span class="ml-1 tabular-nums ${aktif ? 'text-white/70' : 'text-muted'}">${jumlah[t.kunci] ?? 0}</span>
+            <span class="ml-1 tabular-nums ${aktif ? 'text-white/90' : 'text-muted'}">${jumlah[t.kunci] ?? 0}</span>
           </button>`;
       }).join('');
     }

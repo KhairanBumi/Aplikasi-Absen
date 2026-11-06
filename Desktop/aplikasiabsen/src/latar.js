@@ -26,6 +26,10 @@ const PEMBAGI = resep.dividers;
 const BLUR = 64; // fieldBlur di ekspor gradient.js
 const GRAIN = Math.max(0, Math.min(100, resep.noise)) / 100 * 0.5;
 
+// Saturasi kecil (bukan 180% seperti kaca) supaya warna Feral lebih terbaca di
+// gutter dan di balik kaca, tanpa mengubah stop, orb, atau grain resepnya.
+const SATURASI = 1.12;
+
 let kanvas = null;
 let konteks = null;
 let antre = 0;
@@ -124,7 +128,7 @@ export function pasangLatar() {
 
   kanvas = document.createElement('canvas');
   konteks = kanvas.getContext('2d');
-  kanvas.style.filter = `blur(${BLUR}px)`;
+  kanvas.style.filter = `blur(${BLUR}px) saturate(${SATURASI})`;
 
   const lapisButir = document.createElement('div');
   lapisButir.className = 'latar-butir';

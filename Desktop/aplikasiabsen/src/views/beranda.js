@@ -50,7 +50,7 @@ function avatar(nama, foto, kelas = 'size-9') {
                  class="block ${kelas} shrink-0 rounded-full object-cover ring-1 ring-ink/8" />`;
   }
   return `<span class="grid ${kelas} shrink-0 place-items-center rounded-full bg-merek/10
-                       text-xs font-semibold text-merek">${esc(inisial(nama))}</span>`;
+                       text-xs font-semibold text-merek-gelap">${esc(inisial(nama))}</span>`;
 }
 
 function gantiHari(tanggal, n) {
@@ -73,9 +73,9 @@ function labelHari(tanggal, hariIni) {
 
 function barisKosong(teks) {
   return `
-    <p class="flex items-center gap-2.5 rounded-2xl bg-white/55 px-4 py-3.5 text-sm text-muted
+    <p class="flex items-center gap-2.5 rounded-2xl bg-ink/4 px-4 py-3.5 text-sm text-muted
               ring-1 ring-ink/8">
-      <span class="text-emerald-600">${IKON_BENAR}</span>
+      <span class="text-emerald-800">${IKON_BENAR}</span>
       ${esc(teks)}
     </p>`;
 }
@@ -103,11 +103,15 @@ function dashboardAdmin(isi, p) {
   let hidup = true;
   const animasi = panggung();
 
+  // Beranda sudah punya animasi bertahap sendiri (termasuk arah saat tanggal
+  // digeser). Pengamat scroll global tidak boleh menambahkan animasi kedua.
+  isi.setAttribute('data-animasi-manual', '');
+
   isi.innerHTML = `
-    <section class="relative overflow-hidden rounded-[1.75rem] bg-merek p-6 shadow-naik-besar
-                    ring-1 ring-white/20 ring-inset sm:p-8">
-      <div class="pointer-events-none absolute -top-28 -right-20 size-80 rounded-full bg-white/15 blur-3xl"></div>
-      <div class="pointer-events-none absolute -bottom-32 -left-16 size-72 rounded-full bg-fuchsia-300/25 blur-3xl"></div>
+    <section class="relative overflow-hidden rounded-[1.75rem] bg-linear-to-br from-[#5856d6] via-[#4644b8]
+                    to-[#006e7d] p-6 shadow-naik-besar ring-1 ring-white/20 ring-inset sm:p-8">
+      <div class="pointer-events-none absolute -top-28 -right-20 size-80 rounded-full bg-[#f8e58c]/15 blur-3xl"></div>
+      <div class="pointer-events-none absolute -bottom-32 -left-16 size-72 rounded-full bg-[#68be8d]/15 blur-3xl"></div>
 
       <div class="relative flex flex-wrap items-end justify-between gap-x-8 gap-y-5">
         <div class="min-w-0">
@@ -126,19 +130,19 @@ function dashboardAdmin(isi, p) {
           <p data-jam class="angka-rata text-3xl font-semibold tracking-tight text-white sm:text-4xl">
             --.--.--
           </p>
-          <p data-tanggal class="mt-1.5 text-xs text-white/90">—</p>
+          <p data-tanggal class="mt-1.5 text-xs text-white">—</p>
         </div>
       </div>
     </section>
 
-    <div class="${KARTU} mt-6 flex items-center justify-between gap-3 p-2.5">
+    <div class="kaca-lembut mt-6 flex items-center justify-between gap-3 rounded-[1.75rem] p-2.5" data-kartu>
       <button type="button" data-mundur class="${TOMBOL_NAV}" aria-label="Hari sebelumnya">
         ${IKON_KIRI}
       </button>
 
       <div class="min-w-0 text-center">
         <p data-judul-tanggal class="truncate text-sm font-medium text-ink">—</p>
-        <p data-label-tanggal class="text-xs text-muted">—</p>
+        <p data-label-tanggal class="text-xs text-ink/70">—</p>
       </div>
 
       <button type="button" data-maju class="${TOMBOL_NAV}" aria-label="Hari berikutnya">
@@ -156,7 +160,7 @@ function dashboardAdmin(isi, p) {
   const tombolMaju = isi.querySelector('[data-maju]');
 
   animasi.muncul(isi.querySelector('section'), { y: 18, durasi: 0.55 });
-  animasi.muncul(tombolMaju.closest('.kaca'), { y: 10, delay: 0.08 });
+  animasi.muncul(tombolMaju.closest('[data-kartu]'), { y: 10, delay: 0.08 });
 
   async function muat(tanggal, arah = 0) {
     aktif = tanggal;
@@ -204,28 +208,28 @@ function dashboardAdmin(isi, p) {
     kotak.innerHTML = `
       ${
         libur
-          ? `<p class="mb-4 flex items-center gap-2.5 rounded-2xl bg-sky-500/10 px-4 py-3.5 text-sm
+          ? `<p class="kaca mb-4 flex items-center gap-2.5 rounded-2xl px-4 py-3.5 text-sm
                      text-ink ring-1 ring-sky-500/20">
                <span class="font-medium">${esc(libur)}.</span>
-               <span class="text-muted">Tidak ada absensi yang diharapkan hari ini.</span>
+               <span class="text-ink/70">Tidak ada absensi yang diharapkan hari ini.</span>
              </p>`
           : ''
       }
 
-      <div class="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+      <div class="grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-4">
         ${kartuAngka('Sudah absen', String(r.sudah_masuk), `dari ${r.total} anak magang`)}
         ${kartuAngka(
           'Belum absen',
           libur ? '—' : String(r.belum_masuk),
           libur ? 'hari libur' : 'tanpa catatan absen',
-          libur ? 'text-faint' : r.belum_masuk > 0 ? 'text-amber-600' : 'text-ink',
+          libur ? 'text-ink/70' : r.belum_masuk > 0 ? 'text-amber-800' : 'text-ink',
         )}
-        ${kartuAngka('Izin & cuti', String(r.izin), 'sudah disetujui', 'text-sky-600')}
+        ${kartuAngka('Izin & cuti', String(r.izin), 'sudah disetujui', 'text-sky-800')}
         ${kartuAngka(
           'Terlambat',
           String(r.telat),
           r.telat > 0 ? 'dari yang sudah absen' : 'semua tepat waktu',
-          r.telat > 0 ? 'text-rose-600' : 'text-ink',
+          r.telat > 0 ? 'text-rose-800' : 'text-ink',
         )}
       </div>
 
@@ -233,13 +237,13 @@ function dashboardAdmin(isi, p) {
         persen === null
           ? ''
           : `<div class="mt-4 flex items-center gap-3 px-1">
-               <div class="h-2 flex-1 overflow-hidden rounded-full bg-ink/8" role="progressbar"
+               <div class="h-2 flex-1 overflow-hidden rounded-full bg-ink/10" role="progressbar"
                     aria-label="Kehadiran hari ini" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${persen}">
                  <div data-progres data-persen="${persen}"
                       class="h-full rounded-full bg-merek transition-[width] duration-700 ease-apple"
                       style="width:0%"></div>
                </div>
-               <p class="angka-rata shrink-0 text-xs font-medium text-muted">
+               <p class="angka-rata shrink-0 rounded-full bg-ink/8 px-2.5 py-1 text-xs font-medium text-ink/70">
                  <span data-angka>${persen}</span>% hadir
                </p>
              </div>`
@@ -265,7 +269,7 @@ function dashboardAdmin(isi, p) {
                          </span>
                          <span class="shrink-0 text-right">
                            <span class="angka-rata block text-sm font-medium text-ink">${esc(jam(o.waktu))}</span>
-                           <span class="block text-xs font-medium text-rose-600">telat ${o.telat_menit} menit</span>
+                           <span class="block text-xs font-medium text-rose-800">telat ${o.telat_menit} menit</span>
                          </span>
                        </li>`,
                        )
@@ -290,7 +294,7 @@ function dashboardAdmin(isi, p) {
                          (o) => `
                        <li class="flex items-center gap-3.5 py-3">
                          <span class="grid size-9 shrink-0 place-items-center rounded-full
-                                      bg-amber-500/12 text-xs font-semibold text-amber-700">
+                                      bg-amber-500/12 text-xs font-semibold text-amber-800">
                            ${esc(inisial(o.nama))}
                          </span>
                          <span class="min-w-0 flex-1">
@@ -337,8 +341,8 @@ function dashboardAdmin(isi, p) {
                        <span class="shrink-0 text-right">
                          <span class="inline-block rounded-full px-2.5 py-0.5 text-xs font-medium ${
                            a.tipe === 'masuk'
-                             ? 'bg-emerald-500/12 text-emerald-700'
-                             : 'bg-merek/10 text-merek'
+                             ? 'bg-emerald-500/12 text-emerald-800'
+                             : 'bg-merek/10 text-merek-gelap'
                          }">${a.tipe === 'masuk' ? 'Masuk' : 'Pulang'}</span>
                          <span class="angka-rata mt-1 block text-xs text-muted">${esc(jam(a.waktu))}</span>
                        </span>

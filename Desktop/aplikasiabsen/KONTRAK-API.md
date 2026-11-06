@@ -570,11 +570,13 @@ berlaku untuk keempatnya:
   ikut tidak disentuh. Tombol Aktifkan/Nonaktifkan di layar Anak Magang cuma
   mengirim `{ "aktif": false }` — endpoint yang menuntut kiriman lengkap akan
   menolaknya, dan penonaktifannya tidak pernah terjadi.
-- **Tidak ada `DELETE` untuk magang dan lokasi.** Keduanya dirujuk oleh baris
-  absen. Menghapus sebuah lokasi membuat absen orang-orang yang bekerja di sana
-  kehilangan tempatnya; menghapus magang membuat riwayat kehadirannya
-  menggantung tanpa pemiliknya. Menutup lokasi atau memberhentikan orang berarti
-  mengubah `aktif` menjadi `false`.
+- **Tidak ada `DELETE` untuk lokasi.** Lokasi dirujuk oleh baris absen;
+  menghapusnya membuat absen orang-orang yang bekerja di sana kehilangan
+  tempatnya. Menutup lokasi berarti mengubah `aktif` menjadi `false`.
+- **Magang punya `DELETE` yang menghapus seluruh jejaknya.** Menonaktifkan tetap
+  pilihan default untuk orang yang berhenti, karena riwayatnya harus utuh.
+  `DELETE /admin/magang/{id}` disediakan untuk akun yang memang salah dibuat —
+  rinciannya di bawah.
 - **Hari libur dan shift punya `DELETE`, syaratnya berbeda.** Hari libur tidak
   dirujuk siapa pun, jadi selalu boleh dihapus. Shift hanya boleh dihapus kalau
   belum ada yang memakainya — rinciannya di `DELETE /admin/shift/{id}`.
@@ -702,6 +704,31 @@ hak masuknya, bukan catatan kehadirannya selama bekerja. Konsekuensinya yang
 wajib diingat: pemeriksaan `aktif` harus ada di `POST /masuk` **dan** di
 `POST /kiosk/absen`. Kalau hanya ada di `GET /saya/profil`, orang yang baru
 dinonaktifkan masih bisa masuk hari itu juga.
+
+#### `DELETE /admin/magang/{id}`
+
+Menghapus akun **beserta seluruh data kehadirannya**. Ini berbeda dari
+menonaktifkan dan tidak bisa dibatalkan.
+
+```json
+// berhasil — 200
+{ "ok": true }
+```
+
+- Hapus baris `absen` dan `izin` milik pengguna lebih dulu, lalu baris
+  `pengguna`. Keduanya memakai foreign key `restrict`, jadi urutannya penting.
+  Sesi ikut terhapus (atau cascade).
+- Foto absen dan foto profil milik pengguna ikut dihapus dari disk privat.
+- Jejak **audit tidak dihapus**. Baris yang aktornya pengguna ini dilepas
+  (`pengguna_id = null`) agar riwayat tindakan tidak hilang; tindakan admin yang
+  menghapus dicatat sebagai `hapus_magang` dengan salinan `nip` dan `nama`.
+- `izin.diputuskan_oleh` yang menunjuk pengguna ini diubah menjadi `null`.
+- Admin **tidak boleh menghapus akunnya sendiri** → `422`
+  `"Anda tidak bisa menghapus akun sendiri."` Frontend juga tidak menampilkan
+  tombolnya, tapi server tetap harus menolak.
+- Selain admin → `403` (`tidak_berhak`), ID yang tidak ada → `404`.
+- Konfirmasi di frontend harus menyebut bahwa absen dan izin ikut terhapus.
+  Jangan jadikan tombol ini pengganti Nonaktifkan untuk orang yang berhenti.
 
 #### `GET /admin/lokasi`
 

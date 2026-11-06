@@ -10,24 +10,28 @@
 
 import { esc, jam, labelTanggal } from './ui.js';
 
-export const KARTU = 'kaca rounded-[1.75rem] p-6';
+export const KARTU = 'kaca-kartu rounded-[1.75rem] p-4 sm:p-6';
+
+// Kartu ringkasan boleh lebih "kaca" daripada permukaan tabel: isinya pendek,
+// jumlahnya paling banyak empat per layar, dan tidak ada baris data panjang.
+export const KARTU_RINGKASAN = 'kaca-lembut rounded-[1.75rem] p-4 sm:p-6';
 
 // Pil, bukan kotak bersudut, sama seperti tombol di seluruh aplikasi.
 export const TOMBOL_UTAMA =
-  'flex shrink-0 cursor-pointer items-center gap-2 rounded-full bg-merek px-4 py-2.5 text-sm ' +
-  'font-medium text-white shadow-naik transition duration-200 ease-apple hover:bg-merek-gelap ' +
-  'active:scale-[0.97] disabled:cursor-not-allowed disabled:opacity-40';
+  'flex min-h-11 shrink-0 cursor-pointer items-center justify-center gap-2 rounded-full bg-merek ' +
+  'px-4 py-2.5 text-sm font-medium text-white shadow-naik transition duration-200 ease-apple ' +
+  'hover:bg-merek-gelap active:scale-[0.97] disabled:cursor-not-allowed disabled:opacity-40';
 
 export const TOMBOL_HALUS =
-  'cursor-pointer rounded-full border border-ink/10 bg-white/60 px-3.5 py-2 text-sm font-medium ' +
-  'text-ink transition duration-200 ease-apple hover:bg-white/90 active:scale-[0.97] ' +
+  'min-h-11 cursor-pointer rounded-full border border-ink/10 bg-white/60 px-3.5 py-2 text-sm ' +
+  'font-medium text-ink transition duration-200 ease-apple hover:bg-white/90 active:scale-[0.97] ' +
   'disabled:cursor-not-allowed disabled:opacity-40';
 
 // Tombol di dalam baris tabel. Teks saja, tanpa garis: satu baris tabel yang
 // berisi dua tombol berbingkai akan terbaca lebih ramai daripada isinya.
 export const TOMBOL_BARIS =
-  'cursor-pointer rounded-full px-3 py-1.5 text-sm font-medium transition duration-200 ' +
-  'ease-apple hover:bg-ink/6 active:scale-[0.97] disabled:cursor-not-allowed disabled:opacity-40';
+  'min-h-11 cursor-pointer rounded-full px-3 py-2 text-sm font-medium whitespace-nowrap transition ' +
+  'duration-200 ease-apple hover:bg-ink/6 active:scale-[0.97] disabled:cursor-not-allowed disabled:opacity-40';
 
 const IKON_CARI = `
   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9"
@@ -61,12 +65,13 @@ export function kepalaDaftar({ judul, tambah, contohCari = '' }) {
       <div class="ml-auto flex flex-wrap items-center gap-2.5">
         ${
           contohCari
-            ? `<div class="relative">
+            ? `<div class="relative w-full sm:w-auto">
                  <span class="pointer-events-none absolute top-1/2 left-3 -translate-y-1/2 text-muted">${IKON_CARI}</span>
                  <input type="search" data-cari placeholder="${esc(contohCari)}"
+                        aria-label="${esc(contohCari)}"
                         class="w-full rounded-full border border-ink/10 bg-white/70 py-2.5 pr-3.5 pl-9 text-sm
-                               text-ink transition placeholder:text-muted focus:border-merek/50
-                               focus:bg-white/90 focus:ring-4 focus:ring-merek/15 focus:outline-none sm:w-56">
+                               text-ink transition placeholder:text-muted focus:border-merek
+                               focus:bg-white/90 focus:ring-2 focus:ring-merek focus:outline-none sm:w-56">
                </div>`
             : ''
         }
@@ -84,23 +89,36 @@ export function kepalaDaftar({ judul, tambah, contohCari = '' }) {
 /**
  * Tabel daftar.
  * `kolom` berisi { judul, kelas, sel(baris) -> HTML }.
+ *
+ * `kartu` opsional dipakai layar yang punya kolom terlalu banyak untuk dibaca
+ * sebagai tabel di ponsel. Fungsi itu harus mengembalikan satu `<li>`; tabel
+ * desktop tetap dipakai di layar lebar.
  */
-export function tabel({ judul, kolom, baris, kosong = 'Belum ada data.' }) {
-  const isiBaris =
-    baris.length === 0
-      ? `<tr><td colspan="${kolom.length}" class="px-4 py-14 text-center text-muted">${esc(kosong)}</td></tr>`
-      : baris
-          .map(
-            (b) => `
-              <tr class="border-b border-ink/6 transition duration-150 last:border-0 hover:bg-white/45">
-                ${kolom.map((k) => `<td class="${SEL} ${k.kelas ?? ''}">${k.sel(b)}</td>`).join('')}
+export function tabel({ judul, kolom, baris, kosong = 'Belum ada data.', kartu = null }) {
+  const kosongBaris = baris.length === 0;
+  const isiBaris = kosongBaris
+    ? `<tr data-kosong><td colspan="${kolom.length}" class="px-4 py-14 text-center text-muted">${esc(kosong)}</td></tr>`
+    : baris
+        .map(
+          (b) => `
+              <tr class="border-b border-ink/6 transition duration-150 last:border-0 hover:bg-ink/4">
+                ${kolom
+                  .map(
+                    (k) =>
+                      `<td class="${SEL} ${k.kelas ?? ''}">
+                         <span class="label-sel" aria-hidden="true">${esc(k.judul)}</span>
+                         <div class="sel-isi">${k.sel(b)}</div>
+                       </td>`,
+                  )
+                  .join('')}
               </tr>`,
-          )
-          .join('');
+        )
+        .join('');
 
-  return `
-    <div class="mt-5 overflow-x-auto">
-      <table class="w-full min-w-[42rem] border-collapse text-sm">
+  const htmlTabel = `
+    <div class="tabel-responsif scroll-samping mt-5 overflow-x-auto ${kartu ? 'hidden md:block' : ''}"
+         role="region" aria-label="${esc(judul)}" tabindex="0">
+      <table class="w-full min-w-0 border-collapse text-sm md:min-w-[42rem]">
         <caption class="sr-only">${esc(judul)}</caption>
         <thead>
           <tr class="border-b border-ink/8">
@@ -112,13 +130,23 @@ export function tabel({ judul, kolom, baris, kosong = 'Belum ada data.' }) {
         <tbody>${isiBaris}</tbody>
       </table>
     </div>`;
+
+  if (!kartu) return htmlTabel;
+
+  const htmlKartu = kosongBaris
+    ? `<div class="mt-5 rounded-2xl border border-ink/8 bg-ink/4 px-4 py-12 text-center text-sm text-muted md:hidden">
+         ${esc(kosong)}
+       </div>`
+    : `<ul class="mt-5 grid gap-3 md:hidden">${baris.map(kartu).join('')}</ul>`;
+
+  return `${htmlKartu}${htmlTabel}`;
 }
 
 /** Lencana kecil untuk status aktif / nonaktif. */
 export function lencanaStatus(aktif) {
   return aktif
-    ? '<span class="inline-flex rounded-full bg-emerald-500/12 px-2.5 py-1 text-xs font-medium text-emerald-700">Aktif</span>'
-    : '<span class="inline-flex rounded-full bg-ink/8 px-2.5 py-1 text-xs font-medium text-muted">Nonaktif</span>';
+    ? '<span class="inline-flex rounded-full bg-emerald-500/12 px-2.5 py-1 text-xs font-medium text-emerald-800">Aktif</span>'
+    : '<span class="inline-flex rounded-full bg-ink/8 px-2.5 py-1 text-xs font-medium text-ink/70">Nonaktif</span>';
 }
 
 // ── Lencana status ──────────────────────────────────────────────────────────
@@ -126,16 +154,19 @@ export function lencanaStatus(aktif) {
 // Kelasnya ditulis lengkap sebagai teks, bukan disusun dari potongan. Tailwind
 // mencari nama kelas di dalam berkas sumber, dan kelas yang dirangkai saat
 // program berjalan tidak pernah ikut terdeteksi — hasilnya lencana tanpa warna.
+//
+// Shade-nya yang -800, bukan -700: di atas panel kaca, `emerald-700` cuma
+// 3.6:1 dan `amber-700` 3.4:1. Yang -800 melompat ke 4.8–5.6:1.
 
 const WARNA_ABSEN = {
-  tepat: 'bg-emerald-500/12 text-emerald-700',
-  telat: 'bg-amber-500/15 text-amber-700',
-  cuti: 'bg-merek/12 text-merek',
-  izin: 'bg-merek/12 text-merek',
-  sakit: 'bg-rose-500/12 text-rose-700',
-  alpha: 'bg-rose-500/15 text-rose-700',
-  libur: 'bg-ink/8 text-muted',
-  belum: 'bg-ink/8 text-muted',
+  tepat: 'bg-emerald-500/12 text-emerald-800',
+  telat: 'bg-amber-500/15 text-amber-800',
+  cuti: 'bg-merek/12 text-merek-gelap',
+  izin: 'bg-merek/12 text-merek-gelap',
+  sakit: 'bg-rose-500/12 text-rose-800',
+  alpha: 'bg-rose-500/15 text-rose-800',
+  libur: 'bg-ink/8 text-ink/70',
+  belum: 'bg-ink/8 text-ink/70',
 };
 
 const LABEL_ABSEN = {
@@ -153,17 +184,17 @@ const LABEL_ABSEN = {
 };
 
 const WARNA_PENGAJUAN = {
-  menunggu: 'bg-amber-500/15 text-amber-700',
-  disetujui: 'bg-emerald-500/12 text-emerald-700',
-  ditolak: 'bg-rose-500/12 text-rose-700',
+  menunggu: 'bg-amber-500/15 text-amber-800',
+  disetujui: 'bg-emerald-500/12 text-emerald-800',
+  ditolak: 'bg-rose-500/12 text-rose-800',
 };
 
 const LABEL_PENGAJUAN = { menunggu: 'Menunggu', disetujui: 'Disetujui', ditolak: 'Ditolak' };
 
 const WARNA_JENIS = {
-  cuti: 'bg-merek/12 text-merek',
-  izin: 'bg-sky-500/12 text-sky-700',
-  sakit: 'bg-rose-500/12 text-rose-700',
+  cuti: 'bg-merek/12 text-merek-gelap',
+  izin: 'bg-sky-500/12 text-sky-800',
+  sakit: 'bg-rose-500/12 text-rose-800',
 };
 
 export const LABEL_JENIS = { cuti: 'Cuti', izin: 'Izin', sakit: 'Sakit' };
@@ -174,14 +205,14 @@ function lencana(label, kelas) {
 
 /** Status satu hari absen: tepat waktu, telat, cuti, alpha, libur, … */
 export function lencanaAbsen(status) {
-  return lencana(LABEL_ABSEN[status] ?? status, WARNA_ABSEN[status] ?? 'bg-ink/8 text-muted');
+  return lencana(LABEL_ABSEN[status] ?? status, WARNA_ABSEN[status] ?? 'bg-ink/8 text-ink/70');
 }
 
 /** Status pengajuan izin: menunggu, disetujui, ditolak. */
 export function lencanaPengajuan(status) {
   return lencana(
     LABEL_PENGAJUAN[status] ?? status,
-    WARNA_PENGAJUAN[status] ?? 'bg-ink/8 text-muted',
+    WARNA_PENGAJUAN[status] ?? 'bg-ink/8 text-ink/70',
   );
 }
 
@@ -191,7 +222,7 @@ export function lencanaPengajuan(status) {
  * labelnya satu per satu untuk tahu mana yang mengurangi kuota.
  */
 export function lencanaJenis(jenis) {
-  return lencana(LABEL_JENIS[jenis] ?? jenis, WARNA_JENIS[jenis] ?? 'bg-ink/8 text-muted');
+  return lencana(LABEL_JENIS[jenis] ?? jenis, WARNA_JENIS[jenis] ?? 'bg-ink/8 text-ink/70');
 }
 
 /**
@@ -218,7 +249,7 @@ export function kolomHarian() {
       judul: 'Terlambat',
       sel: (h) =>
         h.telat_menit > 0
-          ? `<span class="tabular-nums text-amber-700">${h.telat_menit} menit</span>`
+          ? `<span class="tabular-nums text-amber-800">${h.telat_menit} menit</span>`
           : '<span class="text-muted">—</span>',
     },
     {
@@ -227,6 +258,62 @@ export function kolomHarian() {
     },
     { judul: 'Status', sel: (h) => lencanaAbsen(h.status) },
   ];
+}
+
+/**
+ * Satu hari dalam bentuk kartu untuk tabel yang berganti bentuk di ponsel.
+ *
+ * Hari tanpa catatan masuk cukup satu baris. Sebulan penuh kartu tiga kolom
+ * berisi "—" membuat riwayat kosong terasa seperti daftar panjang yang rusak;
+ * yang perlu dibaca dari hari libur cuma tanggal dan statusnya.
+ */
+export function kartuHarian(h) {
+  const tanggal = `<span class="block font-medium text-ink">${esc(labelTanggal(h.tanggal))}</span>`;
+  const keterangan = h.keterangan_libur
+    ? `<span class="block text-xs text-muted">${esc(h.keterangan_libur)}</span>`
+    : h.alasan_izin
+      ? `<span class="block truncate text-xs text-muted">${esc(h.alasan_izin)}</span>`
+      : '';
+
+  if (!h.masuk && !h.pulang) {
+    return `
+      <li class="flex items-center justify-between gap-3 rounded-xl border border-ink/6 bg-ink/4 px-3.5 py-2.5">
+        <span class="min-w-0">${tanggal}${keterangan}</span>
+        ${lencanaAbsen(h.status)}
+      </li>`;
+  }
+
+  const telat =
+    h.telat_menit > 0
+      ? `<span class="font-medium text-amber-800">${h.telat_menit} menit</span>`
+      : '<span class="text-muted">—</span>';
+
+  return `
+    <li class="rounded-2xl border border-ink/8 bg-ink/4 p-4">
+      <div class="flex items-start justify-between gap-3">
+        <span class="min-w-0">${tanggal}${keterangan}</span>
+        ${lencanaAbsen(h.status)}
+      </div>
+
+      <dl class="mt-3 grid grid-cols-3 gap-2 text-sm">
+        <div>
+          <dt class="text-[0.7rem] text-muted">Masuk</dt>
+          <dd class="angka-rata mt-0.5 tabular-nums text-ink">${esc(jam(h.masuk))}</dd>
+        </div>
+        <div>
+          <dt class="text-[0.7rem] text-muted">Pulang</dt>
+          <dd class="angka-rata mt-0.5 tabular-nums text-ink">${esc(jam(h.pulang))}</dd>
+        </div>
+        <div>
+          <dt class="text-[0.7rem] text-muted">Terlambat</dt>
+          <dd class="mt-0.5 tabular-nums">${telat}</dd>
+        </div>
+      </dl>
+
+      <div class="mt-3 border-t border-ink/6 pt-2.5 text-xs leading-relaxed text-muted">
+        ${rincianLokasi(h, { ringkas: true })}
+      </div>
+    </li>`;
 }
 
 /**
@@ -261,7 +348,7 @@ export function rincianLokasi(h, { ringkas = false } = {}) {
     ? `<a href="https://www.openstreetmap.org/?mlat=${h.lintang}&mlon=${h.bujur}#map=18/${h.lintang}/${h.bujur}"
            target="_blank" rel="noopener"
            title="Buka ${h.lintang}, ${h.bujur} di OpenStreetMap"
-           class="shrink-0 text-merek underline-offset-2 hover:underline">Peta</a>`
+           class="shrink-0 text-merek-gelap underline-offset-2 hover:underline">Peta</a>`
     : '';
 
   // Alamat hasil reverse geocoding dari titik perangkat. Kalau layanan peta
@@ -297,7 +384,7 @@ export function rincianLokasi(h, { ringkas = false } = {}) {
         <span class="font-medium text-ink">Dinas luar</span>
         ${tempat}
         <span class="text-muted">${esc(jarakTeks)}</span>
-        <span class="${kasar ? 'font-medium text-amber-700' : 'text-muted'}">${esc(akurasiTeks)}</span>
+        <span class="${kasar ? 'font-medium text-amber-800' : 'text-muted'}">${esc(akurasiTeks)}</span>
         ${peta}
       </span>`;
   }
@@ -308,7 +395,7 @@ export function rincianLokasi(h, { ringkas = false } = {}) {
       ${tempat}
       <span class="block text-xs text-muted">${esc(jarakTeks)}</span>
       <span class="mt-0.5 flex flex-wrap items-center gap-x-1.5 gap-y-0.5 text-xs">
-        <span class="${kasar ? 'font-medium text-amber-700' : 'text-muted'}">${esc(akurasiTeks)}</span>
+        <span class="${kasar ? 'font-medium text-amber-800' : 'text-muted'}">${esc(akurasiTeks)}</span>
         ${peta}
       </span>
     </span>`;
@@ -319,7 +406,7 @@ export function pesanGalat(pesan) {
   return `
     <div class="mt-5 flex items-start gap-3 rounded-2xl border border-rose-500/20 bg-rose-500/8 px-4 py-3.5 text-sm">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9"
-           stroke-linecap="round" stroke-linejoin="round" class="mt-0.5 size-4 shrink-0 text-rose-600" aria-hidden="true">
+           stroke-linecap="round" stroke-linejoin="round" class="mt-0.5 size-4 shrink-0 text-rose-800" aria-hidden="true">
         <circle cx="12" cy="12" r="9" /><path d="M12 7.8v5" /><path d="M12 16.4h.01" />
       </svg>
       <span class="text-ink">${esc(pesan)}</span>
@@ -334,16 +421,20 @@ export function pesanGalat(pesan) {
  * berwarna membuat semua angka terlihat sama pentingnya.
  */
 export function kartuAngka(label, nilai, catatan = '', warna = 'text-ink') {
+  // `text-ink/70`, bukan `text-muted`: kartu ini memakai kaca 0.7, dan muted di
+  // atas orb teal hanya ~4.0:1. Ink/70 tetap terbaca sebagai teks sekunder.
   return `
-    <div class="${KARTU}">
-      <p class="text-sm text-muted">${esc(label)}</p>
-      <p class="angka-rata mt-2 text-3xl font-semibold tracking-tight ${warna}"><span data-angka>${esc(nilai)}</span></p>
-      <p class="mt-1 text-xs text-muted">${esc(catatan)}</p>
+    <div class="${KARTU_RINGKASAN} kartu-angka">
+      <p class="text-xs text-ink/70 sm:text-sm">${esc(label)}</p>
+      <p class="angka-rata mt-1.5 text-2xl font-semibold tracking-tight sm:mt-2 sm:text-3xl ${warna}">
+        <span data-angka>${esc(nilai)}</span>
+      </p>
+      <p class="mt-1 text-[0.7rem] leading-snug text-ink/70 sm:text-xs">${esc(catatan)}</p>
     </div>`;
 }
 
 export const TOMBOL_NAV =
-  'grid size-9 cursor-pointer place-items-center rounded-full text-ink transition duration-200 ' +
+  'grid size-11 cursor-pointer place-items-center rounded-full text-ink transition duration-200 ' +
   'ease-apple hover:bg-white/80 active:scale-95 disabled:cursor-not-allowed disabled:opacity-30 ' +
   'disabled:hover:bg-transparent disabled:active:scale-100';
 

@@ -28,6 +28,7 @@ import {
   kartuAngka,
   pemilihBulan,
   kolomHarian,
+  kartuHarian,
   TOMBOL_BARIS,
   TOMBOL_HALUS,
 } from '../tabel.js';
@@ -73,20 +74,20 @@ export default {
           ${pemilihBulan()}
         </div>
 
-        <div class="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-          ${kartuAngka('Kehadiran', r.hadir, `hari hadir dari ${hariMungkin} hari kerja`, 'text-emerald-600')}
+        <div class="mt-5 grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-4">
+          ${kartuAngka('Kehadiran', r.hadir, `hari hadir dari ${hariMungkin} hari kerja`, 'text-emerald-800')}
           ${kartuAngka(
             'Keterlambatan',
             r.telat,
             r.telat_menit > 0 ? `total ${r.telat_menit} menit` : 'tidak ada',
-            r.telat > 0 ? 'text-amber-600' : 'text-ink',
+            r.telat > 0 ? 'text-amber-800' : 'text-ink',
           )}
           ${kartuAngka('Izin & cuti', r.izin, 'hari yang sudah disetujui')}
           ${kartuAngka(
             'Tanpa catatan',
             r.alpha,
             r.alpha > 0 ? 'perlu ditanyakan ke anak magangnya' : 'tidak ada',
-            r.alpha > 0 ? 'text-rose-600' : 'text-ink',
+            r.alpha > 0 ? 'text-rose-800' : 'text-ink',
           )}
         </div>
 
@@ -103,6 +104,7 @@ export default {
             kolom: kolomRekap(),
             baris: rekap.data,
             kosong: 'Belum ada data pada bulan ini.',
+            kartu: kartuRekap,
           })}
         </div>`;
 
@@ -118,7 +120,7 @@ export default {
           judul: 'Anak magang',
           sel: (u) => `
             <div class="flex items-center gap-3">
-              <span class="grid size-9 shrink-0 place-items-center rounded-full bg-merek/12 text-xs font-semibold text-merek">
+              <span class="grid size-9 shrink-0 place-items-center rounded-full bg-merek/12 text-xs font-semibold text-merek-gelap">
                 ${esc(inisial(u.nama))}
               </span>
               <span class="min-w-0 leading-tight">
@@ -137,7 +139,7 @@ export default {
             if (!u.luar) return '<span class="text-muted">—</span>';
             return `<span class="tabular-nums text-ink">${u.luar}×</span>${
               u.luar_kasar
-                ? `<span class="mt-0.5 block text-xs font-medium text-amber-700">${u.luar_kasar} GPS kasar</span>`
+                ? `<span class="mt-0.5 block text-xs font-medium text-amber-800">${u.luar_kasar} GPS kasar</span>`
                 : ''
             }`;
           },
@@ -149,7 +151,7 @@ export default {
           sel: (u) =>
             u.telat === 0
               ? '<span class="text-muted">—</span>'
-              : `<span class="tabular-nums text-amber-700">${u.telat}× · ${u.telat_menit} m</span>`,
+              : `<span class="tabular-nums text-amber-800">${u.telat}× · ${u.telat_menit} menit</span>`,
         },
         {
           judul: 'Izin',
@@ -167,14 +169,49 @@ export default {
           sel: (u) =>
             u.alpha === 0
               ? '<span class="text-muted">—</span>'
-              : `<span class="font-medium tabular-nums text-rose-600">${u.alpha}</span>`,
+              : `<span class="font-medium tabular-nums text-rose-800">${u.alpha}</span>`,
         },
         {
           judul: '',
           kelas: 'text-right',
-          sel: (u) => `<button type="button" data-detail="${u.pengguna_id}" class="${TOMBOL_BARIS} text-merek">Lihat</button>`,
+          sel: (u) => `<button type="button" data-detail="${u.pengguna_id}" class="${TOMBOL_BARIS} text-merek-gelap">Lihat</button>`,
         },
       ];
+    }
+
+    function kartuRekap(u) {
+      const izin = u.izin + u.cuti + u.sakit;
+      const angka = (label, nilai, kelas = 'text-ink') => `
+        <div>
+          <p class="text-[0.65rem] font-medium tracking-wide text-muted uppercase">${label}</p>
+          <p class="angka-rata mt-0.5 text-lg font-semibold ${kelas}">${nilai}</p>
+        </div>`;
+
+      return `
+        <li class="rounded-2xl border border-ink/8 bg-ink/4 p-4">
+          <div class="flex items-start gap-3">
+            <span class="grid size-10 shrink-0 place-items-center rounded-full bg-merek/12 text-xs font-semibold text-merek-gelap">
+              ${esc(inisial(u.nama))}
+            </span>
+            <span class="min-w-0 flex-1 leading-tight">
+              <span class="block truncate font-medium text-ink">
+                ${esc(u.nama)}${u.aktif ? '' : ' <span class="text-xs font-normal text-muted">(nonaktif)</span>'}
+              </span>
+              <span class="mt-0.5 block truncate text-xs text-muted">${esc(u.nip)} · ${esc(u.shift)}</span>
+              ${u.luar ? `<span class="mt-1 block text-xs font-medium text-amber-800">${u.luar}× dinas luar${u.luar_kasar ? ` · ${u.luar_kasar} GPS kasar` : ''}</span>` : ''}
+            </span>
+            <button type="button" data-detail="${u.pengguna_id}" class="${TOMBOL_BARIS} -mr-2 -mt-1 text-merek-gelap">
+              Lihat
+            </button>
+          </div>
+
+          <div class="mt-3 grid grid-cols-4 gap-2 rounded-xl bg-ink/4 px-3 py-2.5 text-center ring-1 ring-ink/6">
+            ${angka('Hadir', u.hadir, 'text-emerald-800')}
+            ${angka('Telat', u.telat, u.telat > 0 ? 'text-amber-800' : 'text-ink')}
+            ${angka('Izin', izin)}
+            ${angka('Tanpa', u.alpha, u.alpha > 0 ? 'text-rose-800' : 'text-ink')}
+          </div>
+        </li>`;
     }
 
     // ── Rincian satu orang ────────────────────────────────────────────────────
@@ -208,20 +245,20 @@ export default {
           </div>
         </div>
 
-        <div class="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-          ${kartuAngka('Hadir', hadir, `dari ${hari.filter((h) => h.status !== 'libur' && h.status !== 'belum').length} hari kerja`, 'text-emerald-600')}
+        <div class="mt-5 grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-4">
+          ${kartuAngka('Hadir', hadir, `dari ${hari.filter((h) => h.status !== 'libur' && h.status !== 'belum').length} hari kerja`, 'text-emerald-800')}
           ${kartuAngka(
             'Terlambat',
             hitung('telat'),
             telatMenit > 0 ? `total ${telatMenit} menit` : 'tidak ada',
-            hitung('telat') > 0 ? 'text-amber-600' : 'text-ink',
+            hitung('telat') > 0 ? 'text-amber-800' : 'text-ink',
           )}
           ${kartuAngka('Izin & cuti', hitung('izin') + hitung('cuti') + hitung('sakit'), 'hari yang sudah disetujui')}
           ${kartuAngka(
             'Tanpa catatan',
             hitung('alpha'),
             hitung('alpha') > 0 ? 'perlu ditanyakan' : 'tidak ada',
-            hitung('alpha') > 0 ? 'text-rose-600' : 'text-ink',
+            hitung('alpha') > 0 ? 'text-rose-800' : 'text-ink',
           )}
         </div>
 
@@ -238,7 +275,7 @@ export default {
                    © OpenStreetMap contributors.
                    ${
                      luarKasar.length > 0
-                       ? `<span class="mt-1 block font-medium text-amber-700">${luarKasar.length} di antaranya tanpa akurasi atau berakurasi kasar — buka Peta untuk memeriksa titiknya.</span>`
+                       ? `<span class="mt-1 block font-medium text-amber-800">${luarKasar.length} di antaranya tanpa akurasi atau berakurasi kasar — buka Peta untuk memeriksa titiknya.</span>`
                        : ''
                    }
                  </div>`
@@ -250,6 +287,7 @@ export default {
             kolom: kolomHarian(),
             baris: hari,
             kosong: 'Belum ada catatan pada bulan ini.',
+            kartu: kartuHarian,
           })}
         </div>`;
     }

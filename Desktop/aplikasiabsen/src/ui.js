@@ -138,8 +138,8 @@ export function inisial(nama) {
 // tampak seperti dua aplikasi berbeda.
 export const KELAS_ISIAN =
   'block w-full rounded-xl border border-ink/10 bg-white/70 px-3.5 py-3 text-ink transition ' +
-  'placeholder:text-muted focus:border-merek/50 focus:bg-white/90 focus:ring-4 ' +
-  'focus:ring-merek/15 focus:outline-none';
+  'placeholder:text-ink/70 focus:border-merek focus:bg-white/90 focus:ring-2 ' +
+  'focus:ring-merek focus:outline-none';
 
 // ── Dialog ─────────────────────────────────────────────────────────────────
 // Memakai <dialog> bawaan browser: backdrop, kunci fokus, dan tombol Esc sudah
@@ -166,8 +166,8 @@ const KELAS_TOMBOL = {
 };
 
 const GAYA_IKON = {
-  berhasil: 'bg-emerald-500/15 text-emerald-700',
-  tanya: 'bg-amber-500/15 text-amber-700',
+  berhasil: 'bg-emerald-500/15 text-emerald-800',
+  tanya: 'bg-amber-500/15 text-amber-800',
 };
 
 const IKON_DIALOG = {
@@ -191,7 +191,7 @@ function ambilDialog() {
   kotakDialog = document.createElement('dialog');
   // `kaca-tebal`, bukan `kaca`: dialog menampilkan keputusan yang harus dibaca
   // benar, jadi bahannya lebih pekat. Latar belakangnya diatur di style.css.
-  kotakDialog.className = 'kaca-tebal m-auto w-full max-w-sm rounded-[1.5rem] p-6 text-ink';
+  kotakDialog.className = 'kaca-tebal m-auto w-[calc(100%-2rem)] max-w-sm rounded-[1.5rem] p-6 text-ink';
   kotakDialog.innerHTML = `
     <div class="flex gap-3.5">
       <span data-ikon-dialog class="mt-0.5 grid size-9 shrink-0 place-items-center rounded-full"></span>
@@ -402,7 +402,7 @@ export function dialogFormulir({
   kirim,
 }) {
   const d = document.createElement('dialog');
-  d.className = 'kaca-tebal m-auto max-h-[calc(100dvh-2rem)] w-full max-w-lg overflow-y-auto rounded-[1.5rem] p-6 text-ink';
+  d.className = 'kaca-tebal m-auto max-h-[calc(100dvh-2rem)] w-[calc(100%-2rem)] max-w-lg overflow-y-auto rounded-[1.5rem] p-6 text-ink';
 
   const baris = kolom
     .map((k, i) => satuKolom(k, nilai[k.nama] ?? '', `f${i}-${k.nama}`))

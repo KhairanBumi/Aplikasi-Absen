@@ -4,12 +4,13 @@
 // master berikutnya: kartu daftar, kotak cari yang menyaring di browser,
 // formulir di dalam dialog, dan konfirmasi terpisah untuk hal yang berbahaya.
 //
-// Dua hal sengaja TIDAK ada di layar ini:
+// Dua hal yang perlu diingat:
 //
-// - Menghapus magang. Riwayat absennya akan menggantung tanpa pemiliknya.
-//   Yang tersedia adalah menonaktifkan, dan riwayatnya tetap utuh.
-// - Menampilkan PIN. Server tidak pernah mengirimkannya ke browser; formulir
-//   ini hanya bisa MENGISI PIN baru, tidak pernah membacanya kembali.
+// - Menonaktifkan adalah pilihan default untuk orang yang berhenti, karena
+//   riwayatnya tetap utuh. Hapus permanen tersedia untuk akun yang memang
+//   salah dibuat; server ikut membuang absen, izin, dan sesinya.
+// - PIN tidak pernah ditampilkan. Server tidak mengirimkannya ke browser;
+//   formulir ini hanya bisa MENGISI PIN baru, tidak pernah membacanya kembali.
 
 import { api, pengguna } from '../api.js';
 import { esc, inisial, dialogFormulir, konfirmasi, beritahu } from '../ui.js';
@@ -55,7 +56,7 @@ export default {
         judul: 'Nama',
         sel: (u) => `
           <div class="flex items-center gap-3">
-            <span class="grid size-9 shrink-0 place-items-center rounded-full bg-merek/12 text-xs font-semibold text-merek">
+            <span class="grid size-9 shrink-0 place-items-center rounded-full bg-merek/12 text-xs font-semibold text-merek-gelap">
               ${esc(inisial(u.nama))}
             </span>
             <span class="min-w-0 leading-tight">
@@ -72,7 +73,7 @@ export default {
         sel: (u) => `
           <span class="block leading-tight">
             <span class="block tabular-nums text-muted">${esc(u.nip)}</span>
-            ${u.nik ? `<span class="block text-xs tabular-nums text-faint">${esc(u.nik)}</span>` : ''}
+            ${u.nik ? `<span class="block text-xs tabular-nums text-muted">${esc(u.nik)}</span>` : ''}
           </span>`,
       },
       { judul: 'Divisi', sel: (u) => `<span class="text-ink">${esc(u.divisi || '—')}</span>` },
@@ -84,16 +85,20 @@ export default {
         kelas: 'text-right',
         sel: (u) => `
           <div class="flex justify-end gap-1">
-            <button type="button" data-ubah="${u.id}" class="${TOMBOL_BARIS} text-merek">Ubah</button>
+            <button type="button" data-ubah="${u.id}" class="${TOMBOL_BARIS} text-merek-gelap">Ubah</button>
             ${
-              // Menonaktifkan akun sendiri akan mengunci admin keluar dari
-              // layar ini, dan tidak ada siapa pun yang bisa mengembalikannya.
-              // Server menolaknya juga; di sini tombolnya tidak ditawarkan.
+              // Menonaktifkan atau menghapus akun sendiri akan mengunci admin
+              // keluar dari layar ini, dan tidak ada siapa pun yang bisa
+              // mengembalikannya. Server menolaknya juga; di sini tombolnya
+              // tidak ditawarkan.
               u.id === aku.id
                 ? ''
                 : `<button type="button" data-status="${u.id}"
-                           class="${TOMBOL_BARIS} ${u.aktif ? 'text-rose-600' : 'text-emerald-700'}">
+                           class="${TOMBOL_BARIS} ${u.aktif ? 'text-amber-800' : 'text-emerald-800'}">
                      ${u.aktif ? 'Nonaktifkan' : 'Aktifkan'}
+                   </button>
+                   <button type="button" data-hapus="${u.id}" class="${TOMBOL_BARIS} text-rose-800">
+                     Hapus
                    </button>`
             }
           </div>`,
@@ -304,6 +309,35 @@ export default {
       await muat();
     }
 
+    async function hapusMagang(id) {
+      const orang = semua.find((u) => u.id === id);
+      if (!orang) return;
+
+      const yakin = await konfirmasi({
+        judul: `Hapus ${orang.nama} permanen?`,
+        pesan:
+          'Seluruh riwayat absen, pengajuan izin, dan sesi akun ini akan dihapus ' +
+          'dan tidak bisa dikembalikan. Kalau orang ini hanya berhenti magang, ' +
+          'pilih Nonaktifkan agar riwayatnya tetap tersimpan.',
+        tombol: 'Hapus permanen',
+        bahaya: true,
+      });
+      if (!yakin) return;
+
+      try {
+        await api.del(`/admin/magang/${id}`);
+      } catch (galat) {
+        await beritahu({ judul: 'Tidak bisa menghapus', pesan: galat.message });
+        return;
+      }
+
+      await muat();
+      await beritahu({
+        judul: 'Akun dihapus',
+        pesan: `${orang.nama} beserta seluruh riwayat kehadirannya sudah dihapus.`,
+      });
+    }
+
     // Satu pendengar untuk seluruh tabel: barisnya digambar ulang setiap kali
     // daftarnya dimuat, jadi pendengar yang dipasang per baris akan hilang.
     kotakDaftar.addEventListener('click', (e) => {
@@ -313,7 +347,12 @@ export default {
         return;
       }
       const status = e.target.closest('[data-status]');
-      if (status) ubahStatus(Number(status.dataset.status));
+      if (status) {
+        ubahStatus(Number(status.dataset.status));
+        return;
+      }
+      const hapus = e.target.closest('[data-hapus]');
+      if (hapus) hapusMagang(Number(hapus.dataset.hapus));
     });
 
     isi.querySelector('[data-tambah]').addEventListener('click', () => bukaForm(null));

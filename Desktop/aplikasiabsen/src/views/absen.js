@@ -17,13 +17,6 @@ const JEDA_HASIL = 7000; // ms sebelum kembali ke layar awal
 const JEDA_DIAM = 45000; // ms tanpa ketikan sebelum kolom dikosongkan
 const MULAI_HITUNG = 3;
 
-const IKON_MEREK = `
-  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"
-       stroke-linecap="round" stroke-linejoin="round" class="size-5" aria-hidden="true">
-    <circle cx="12" cy="12" r="8.6" />
-    <path d="M12 7.2V12l3.1 1.9" />
-  </svg>`;
-
 const IKON_LOKASI = `
   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"
        stroke-linecap="round" stroke-linejoin="round" class="size-4" aria-hidden="true">
@@ -73,10 +66,10 @@ const IKON_MUTAR_KECIL = `
 
 // Kolom isian kiosk: sama seperti di layar masuk, tapi lebih tinggi dan
 // berhuruf besar karena dibaca dari jarak satu langkah dari layar.
-const ISIAN = `${KELAS_ISIAN} py-4 text-center text-xl`;
+const ISIAN = `${KELAS_ISIAN} py-3 text-center text-lg sm:py-4 sm:text-xl`;
 
 const TOMBOL =
-  'flex w-full cursor-pointer items-center justify-center gap-2 rounded-full bg-merek px-5 py-4 ' +
+  'flex min-h-12 w-full cursor-pointer items-center justify-center gap-2 rounded-full bg-merek px-5 py-3.5 ' +
   'font-medium text-white shadow-naik transition duration-200 ease-apple hover:bg-merek-gelap ' +
   'active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-55';
 
@@ -154,24 +147,23 @@ export default {
     // beranda, jadi mengirimnya ke sana cuma satu lompatan tambahan.
     const tautanKembali = pengguna()
       ? `<a href="${pengguna().peran === 'magang' ? '#/riwayat' : '#/beranda'}"
-            class="kaca flex items-center gap-1.5 rounded-full px-3.5 py-2 text-sm font-medium text-ink
+            aria-label="Kembali"
+            class="kaca flex min-h-11 items-center gap-1.5 rounded-full px-3 py-2 text-sm font-medium text-ink
                    transition duration-200 ease-apple hover:bg-white/90 active:scale-[0.97]">
            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9"
                 stroke-linecap="round" stroke-linejoin="round" class="size-4" aria-hidden="true">
              <path d="M14.5 6.5 9 12l5.5 5.5" />
            </svg>
-           Kembali
+           <span class="hidden sm:inline">Kembali</span>
          </a>`
       : '';
 
     akar.innerHTML = `
-      <main id="isi-utama" tabindex="-1" class="flex min-h-dvh flex-col px-5 py-6 outline-none sm:px-8">
-        <header class="flex shrink-0 items-center justify-between gap-4">
-          <span class="flex items-center gap-2.5">
-            <span class="grid size-9 place-items-center rounded-xl bg-merek text-white shadow-naik">
-              ${IKON_MEREK}
-            </span>
-            <span class="text-sm font-medium text-muted">Aplikasi Absen</span>
+      <main id="isi-utama" tabindex="-1" class="flex min-h-dvh flex-col px-4 py-4 outline-none sm:px-8 sm:py-6">
+        <header class="flex shrink-0 items-center justify-between gap-3">
+          <span class="flex items-center gap-2 rounded-full bg-white/75 p-1 sm:pr-3">
+            <img src="/bpjs-mark.png" alt="" width="128" height="128" class="size-8 shrink-0" />
+            <span class="hidden text-xs font-medium text-ink/70 sm:inline sm:text-sm">Aplikasi Absen</span>
           </span>
 
           <span class="flex shrink-0 items-center gap-2">
@@ -180,17 +172,19 @@ export default {
           </span>
         </header>
 
-        <div class="shrink-0 pt-8 text-center">
-          <p data-jam class="angka-rata text-6xl font-semibold tracking-tight text-ink sm:text-7xl">
+        <div class="shrink-0 pt-3 text-center sm:pt-8">
+          <p data-jam class="angka-rata text-4xl font-semibold tracking-tight text-ink sm:text-6xl lg:text-7xl">
             --.--.--
           </p>
-          <p data-tanggal class="mt-2 text-sm text-muted">—</p>
+          <p data-tanggal class="mt-1.5 inline-flex rounded-full bg-white/60 px-3 py-1 text-[0.7rem] text-ink/70 sm:mt-2 sm:text-sm">—</p>
         </div>
 
-        <div data-panggung class="flex flex-1 flex-col items-center justify-center py-8"></div>
+        <div data-panggung class="flex flex-1 flex-col items-center justify-center py-3 sm:py-8"></div>
 
-        <footer class="shrink-0 text-center text-xs text-muted">
-          Kehadiran hanya tercatat dari perangkat ini.
+        <footer class="shrink-0 text-center">
+          <span class="inline-flex rounded-full bg-white/60 px-3 py-1 text-[0.7rem] text-ink/70 sm:text-xs">
+            Kehadiran hanya tercatat dari perangkat ini.
+          </span>
         </footer>
 
         <div data-live class="sr-only" aria-live="polite" aria-atomic="true"></div>
@@ -236,19 +230,20 @@ export default {
       const modeLuar = panggung.querySelector('[name="mode"][value="luar"]')?.checked === true;
 
       if (gpsStatus === 'idle') {
-        el.className = 'mt-2 flex flex-wrap items-center gap-x-1.5 gap-y-1 text-xs text-muted';
-        el.innerHTML = `<span>Lokasi perangkat belum diambil${
-          modeLuar ? ' (dianjurkan untuk dinas luar)' : ' (opsional)'
-        }.</span>
-          <button type="button" class="font-medium text-merek underline">Ambil lokasi</button>`;
+        el.className = 'mt-2 flex flex-wrap items-center gap-x-2 gap-y-1.5 text-xs text-ink/70';
+        el.innerHTML = `<span>Lokasi belum diambil${modeLuar ? ' (dianjurkan)' : ' (opsional)'}.</span>
+          <button type="button"
+                  class="inline-flex min-h-9 items-center rounded-full border border-ink/10 bg-white/70
+                         px-3 font-medium text-ink transition duration-200 ease-apple hover:bg-white
+                         active:scale-[0.97]">Ambil</button>`;
         el.querySelector('button')?.addEventListener('click', () => mulaiGps());
         return;
       }
 
-      el.className = 'mt-2 flex flex-wrap items-center gap-x-1.5 gap-y-1 text-xs';
+      el.className = 'mt-2 flex flex-wrap items-center gap-x-2 gap-y-1.5 text-sm';
 
       if (gpsStatus === 'memuat') {
-        el.classList.add('text-muted');
+        el.classList.add('text-ink/70');
         el.innerHTML = `${IKON_MUTAR_KECIL}<span>Mengambil lokasi…</span>`;
         return;
       }
@@ -262,7 +257,7 @@ export default {
         const info = jarakKeKantor();
         const diLuar = Boolean(info && !info.diDalam);
 
-        el.classList.add(sangatKasar ? 'text-amber-700' : diLuar ? 'text-amber-700' : 'text-emerald-700');
+        el.classList.add(sangatKasar ? 'text-amber-900' : diLuar ? 'text-amber-900' : 'text-emerald-800');
 
         const angka = gps.akurasi === null ? '?' : gps.akurasi;
         const radius = info
@@ -273,7 +268,10 @@ export default {
           sangatKasar ? ' (sangat kasar, tetap dicatat)' : kasar ? ' (kasar)' : ''
         }</span>${
           kasar
-            ? '<button type="button" class="shrink-0 font-medium underline">Ambil ulang</button>'
+            ? `<button type="button"
+                       class="inline-flex min-h-9 shrink-0 items-center rounded-full border border-ink/10
+                              bg-white/70 px-3 font-medium text-ink transition duration-200 ease-apple
+                              hover:bg-white active:scale-[0.97]">Ambil ulang</button>`
             : ''
         }`;
 
@@ -297,18 +295,21 @@ export default {
 
       // Di mode perusahaan lokasi memang keterangan tambahan, jadi kegagalan
       // GPS tidak boleh tampil sekeras kegagalan di mode dinas luar.
-      el.classList.add(modeLuar ? 'text-rose-700' : 'text-muted');
+      el.classList.add(modeLuar ? 'text-rose-800' : 'text-ink/70');
       el.innerHTML = `<span class="flex-1">${esc(gpsPesan)}${
         modeLuar ? '' : ' (opsional untuk absen di perusahaan)'
       }</span>
-        <button type="button" class="shrink-0 font-medium underline">Coba lagi</button>`;
+        <button type="button"
+                class="inline-flex min-h-9 shrink-0 items-center rounded-full border border-ink/10
+                       bg-white/70 px-3 font-medium text-ink transition duration-200 ease-apple
+                       hover:bg-white active:scale-[0.97]">Coba lagi</button>`;
 
       if (modeLuar) {
         el.insertAdjacentHTML(
           'beforeend',
-          `<label class="flex basis-full items-start gap-2 pt-1">
+          `<label class="flex min-h-11 basis-full cursor-pointer items-center gap-2.5 pt-1">
              <input type="checkbox" data-tanpa-lokasi ${tanpaLokasi ? 'checked' : ''}
-                    class="mt-0.5 size-3.5 accent-merek" />
+                    class="size-4 shrink-0 accent-merek" />
              <span>Lanjut absen di luar tanpa koordinat. Rekap akan menandai lokasi tidak tersedia.</span>
            </label>`,
         );
@@ -394,7 +395,7 @@ export default {
 
       if (perangkatGalat) {
         el.className =
-          'flex items-center gap-1.5 rounded-full bg-rose-500/10 px-3 py-1.5 text-xs font-medium text-rose-700';
+          'flex items-center gap-1.5 rounded-full bg-white/75 px-3 py-1.5 text-xs font-medium text-rose-800 ring-1 ring-rose-500/20';
         el.textContent = 'Perangkat belum terdaftar';
         el.title = perangkatGalat.message;
         return;
@@ -407,8 +408,10 @@ export default {
       }
 
       el.className =
-        'kaca flex items-center gap-1.5 rounded-full px-3.5 py-2 text-sm font-medium text-ink';
-      el.innerHTML = `${IKON_LOKASI}${esc(lokasi.nama)}`;
+        'kaca flex min-h-11 max-w-[46vw] min-w-0 items-center gap-1.5 rounded-full px-3 py-2 ' +
+        'text-xs font-medium text-ink sm:max-w-none sm:px-3.5 sm:text-sm';
+      el.title = lokasi.nama;
+      el.innerHTML = `${IKON_LOKASI}<span class="truncate">${esc(lokasi.nama)}</span>`;
     }
 
     // ── langkah 1: NIP dan PIN ───────────────────────────────────────────────
@@ -426,49 +429,65 @@ export default {
       lupakanGps();
 
       panggung.innerHTML = `
-        <div class="kaca w-full max-w-md rounded-[1.75rem] p-6 sm:p-7">
-          <h1 class="text-center text-lg font-semibold tracking-tight text-ink">Absen Kehadiran</h1>
-          <p class="mt-1 text-center text-sm text-muted">Masukkan NIP dan PIN Anda.</p>
+        <div class="kaca w-full max-w-md rounded-[1.5rem] p-4 sm:rounded-[1.75rem] sm:p-7">
+          <h1 class="text-center text-base font-semibold tracking-tight text-ink sm:text-lg">Absen Kehadiran</h1>
+          <p class="mt-1 text-center text-xs text-ink/70 sm:text-sm">Masukkan NIP dan PIN Anda.</p>
 
           <div data-perangkat hidden
                class="mt-3 flex items-start gap-2.5 rounded-xl border border-amber-500/25 bg-amber-500/10 p-3 text-xs text-amber-900"></div>
 
-          <form novalidate class="mt-6 space-y-4">
+          <form novalidate class="mt-4 space-y-3 sm:mt-6 sm:space-y-4">
             <fieldset>
               <legend class="mb-2 block text-sm font-medium text-ink">Absen dari mana?</legend>
               <div class="grid grid-cols-2 gap-1.5 rounded-2xl bg-ink/6 p-1.5">
-                <label class="cursor-pointer rounded-xl px-3 py-2.5 text-center text-sm font-medium
-                              text-muted transition duration-200 ease-apple
-                              has-[:checked]:bg-white has-[:checked]:text-ink has-[:checked]:shadow-naik">
+                <label class="cursor-pointer rounded-xl px-3 py-3 text-center text-sm font-medium
+                              text-ink/70 transition duration-200 ease-apple
+                              has-[:checked]:bg-white has-[:checked]:text-ink has-[:checked]:shadow-naik
+                              has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-merek
+                              has-[:focus-visible]:ring-offset-2 has-[:focus-visible]:ring-offset-white">
                   <input type="radio" name="mode" value="kantor" checked class="sr-only" />
                   Di perusahaan
                 </label>
-                <label class="cursor-pointer rounded-xl px-3 py-2.5 text-center text-sm font-medium
-                              text-muted transition duration-200 ease-apple
-                              has-[:checked]:bg-white has-[:checked]:text-ink has-[:checked]:shadow-naik">
+                <label class="cursor-pointer rounded-xl px-3 py-3 text-center text-sm font-medium
+                              text-ink/70 transition duration-200 ease-apple
+                              has-[:checked]:bg-white has-[:checked]:text-ink has-[:checked]:shadow-naik
+                              has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-merek
+                              has-[:focus-visible]:ring-offset-2 has-[:focus-visible]:ring-offset-white">
                   <input type="radio" name="mode" value="luar" class="sr-only" />
                   Di luar
                 </label>
               </div>
               <div data-gps class="mt-2 hidden"></div>
-              <p class="mt-2 text-xs text-muted">
-                Lokasi dipakai untuk mencatat alamat absen dan membandingkannya dengan radius
-                kantor. Untuk dinas luar, GPS dianjurkan; bila perangkat tidak punya layanan
-                lokasi, absen tetap bisa dikirim dan rekap akan menandainya. Untuk absen di
-                perusahaan, lokasi hanya keterangan tambahan.
-              </p>
+              <details class="group mt-2 text-xs text-ink/70">
+                <summary class="flex cursor-pointer list-none items-center gap-1.5 font-medium text-ink
+                                [&::-webkit-details-marker]:hidden">
+                  Kenapa lokasi dicatat?
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"
+                       stroke-linecap="round" stroke-linejoin="round"
+                       class="size-3.5 transition duration-200 group-open:rotate-180" aria-hidden="true">
+                    <path d="m6 9 6 6 6-6" />
+                  </svg>
+                </summary>
+                <p class="mt-1.5 leading-relaxed">
+                  Lokasi mencatat alamat absen dan jaraknya ke kantor. Untuk dinas luar, GPS
+                  dianjurkan; bila perangkat tidak punya layanan lokasi, absen tetap bisa
+                  dikirim dan rekap akan menandainya.
+                </p>
+              </details>
             </fieldset>
 
-            <div>
-              <label for="nip" class="mb-1.5 block text-sm font-medium text-ink">NIP</label>
-              <input id="nip" name="nip" autocomplete="off" autocapitalize="characters" required
-                     value="${esc(nipAwal)}" placeholder="MGG001" class="${ISIAN} uppercase" />
-            </div>
+            <div class="grid grid-cols-2 gap-3">
+              <div>
+                <label for="nip" class="mb-1.5 block text-xs font-medium text-ink sm:text-sm">NIP</label>
+                <input id="nip" name="nip" autocomplete="off" autocapitalize="characters" required
+                       value="${esc(nipAwal)}" placeholder="MGG001" class="${ISIAN} uppercase" />
+              </div>
 
-            <div>
-              <label for="pin" class="mb-1.5 block text-sm font-medium text-ink">PIN</label>
-              <input id="pin" name="pin" type="password" inputmode="numeric" maxlength="6" required
-                     autocomplete="new-password" placeholder="••••" class="${ISIAN} tracking-[0.4em]" />
+              <div>
+                <label for="pin" class="mb-1.5 block text-xs font-medium text-ink sm:text-sm">PIN</label>
+                <input id="pin" name="pin" type="password" inputmode="numeric" maxlength="6" required
+                       autocomplete="new-password" placeholder="••••" class="${ISIAN} tracking-[0.4em]" />
+              </div>
             </div>
 
             <div data-galat role="alert" ${galat ? '' : 'hidden'}
@@ -609,7 +628,8 @@ export default {
 
       panggung.innerHTML = `
         <div class="w-full max-w-md text-center">
-          <p class="text-sm font-medium text-muted">Hadapkan wajah Anda ke kamera</p>
+          <p class="inline-flex rounded-full bg-white/75 px-3 py-1 text-sm font-medium text-ink
+                    ring-1 ring-white/40">Hadapkan wajah Anda ke kamera</p>
 
           <div class="relative mt-4 overflow-hidden rounded-[1.75rem] bg-ink/10 ring-1 ring-ink/10">
             <video data-video playsinline muted
@@ -621,7 +641,8 @@ export default {
             </div>
           </div>
 
-          <p class="mt-4 text-sm text-muted">Foto diambil otomatis.</p>
+          <p class="mt-4 inline-flex rounded-full bg-white/75 px-3 py-1 text-sm text-ink/80
+                    ring-1 ring-white/40">Foto diambil otomatis.</p>
         </div>`;
 
       const video = panggung.querySelector('[data-video]');
@@ -703,7 +724,8 @@ export default {
             <img src="${gambar}" alt="" class="block aspect-[4/3] w-full object-cover" />
           </div>
 
-          <p class="mt-5 flex items-center justify-center gap-2.5 text-sm font-medium text-muted">
+          <p class="mx-auto mt-5 flex w-fit items-center justify-center gap-2.5 rounded-full
+                    bg-white/75 px-3.5 py-1.5 text-sm font-medium text-ink ring-1 ring-white/40">
             ${IKON_MUTAR}
             ${percobaan > 1 ? 'Mengirim ulang absen…' : 'Menyimpan absen…'}
           </p>
@@ -808,26 +830,27 @@ export default {
         .join(' · ');
 
       panggung.innerHTML = `
-        <div class="w-full max-w-md text-center">
+        <div class="kaca w-full max-w-md rounded-[1.75rem] p-5 text-center sm:p-7">
           <span class="mx-auto grid size-16 place-items-center rounded-full ${
-            ok ? 'bg-emerald-500/15 text-emerald-700' : 'bg-rose-500/15 text-rose-700'
+            ok ? 'bg-emerald-500/15 text-emerald-800' : 'bg-rose-500/15 text-rose-800'
           }">
             ${ok ? IKON_BENAR : IKON_SALAH}
           </span>
 
           <h2 class="mt-5 text-2xl font-semibold tracking-tight text-ink">${esc(judul)}</h2>
-          ${pesan ? `<p class="mt-2 text-muted">${esc(pesan)}</p>` : ''}
+          ${pesan ? `<p class="mt-2 text-ink/70">${esc(pesan)}</p>` : ''}
 
           ${
             ok
-              ? `<div class="kaca mt-6 flex items-center gap-3.5 rounded-2xl p-3 text-left">
+              ? `<div class="mt-6 flex items-center gap-3.5 rounded-2xl bg-white/70 p-3 text-left
+                            ring-1 ring-ink/8">
                    <img src="${gambar}" alt="" class="size-14 shrink-0 rounded-xl object-cover" />
                    <span class="min-w-0 flex-1">
                      <span class="block truncate font-medium text-ink">${esc(nama)}</span>
-                     <span class="block text-sm text-muted">Pukul ${esc(jam(waktu))}</span>
+                     <span class="block text-sm text-ink/70">Pukul ${esc(jam(waktu))}</span>
                      ${
                        rincian
-                         ? `<span class="mt-1 block text-xs ${perluCatatan ? 'font-medium text-amber-700' : 'text-muted'}">
+                         ? `<span class="mt-1 block text-xs ${perluCatatan ? 'font-medium text-amber-900' : 'text-ink/70'}">
                               ${esc(rincian)}${kasar ? ' · akurasi kasar' : ''}
                             </span>`
                          : ''
@@ -849,7 +872,7 @@ export default {
               : ''
           }
 
-          <p class="mt-4 text-xs text-muted">
+          <p class="mt-4 text-xs text-ink/70">
             Kembali ke layar awal dalam <span data-sisa class="angka-rata">${detik}</span> detik
           </p>
         </div>`;
