@@ -261,6 +261,22 @@ export function pasangKerangka(akar, { judul, aksi = '' }) {
       ?.scrollIntoView({ block: 'nearest' });
   });
 
+  // Kiosk dibuka di tab sendiri. Sesi diakhiri sebelum tab baru lahir supaya
+  // tab kiosk tidak mewarisi token, dan tab dashboard tidak tertinggal dengan
+  // sesi hidup. Kalau popup diblokir, kiosk dibuka di tab ini; sesinya sudah
+  // bersih, jadi tetap aman.
+  akar.addEventListener('click', (e) => {
+    const tautan = e.target.closest('a[href="#/absen"]');
+    if (!tautan || e.button !== 0 || e.ctrlKey || e.metaKey || e.shiftKey || e.altKey) return;
+
+    e.preventDefault();
+    api.post('/keluar').catch(() => {});
+    hapusSesi();
+
+    const tab = window.open('#/absen', '_blank');
+    location.replace(tab ? '#/masuk' : '#/absen');
+  });
+
   // Menekan menu halaman yang sedang aktif tidak memicu hashchange. Tanpa ini,
   // halaman tetap di posisi gulir sebelumnya dan terasa tidak merespons.
   akar.addEventListener('click', (e) => {

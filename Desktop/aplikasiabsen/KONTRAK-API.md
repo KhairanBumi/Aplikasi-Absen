@@ -88,8 +88,8 @@ mengeluarkan orang dari aplikasinya.
 > cookie sesi siapa pun, karena dipakai bergantian oleh seluruh magang.
 >
 > Aturan yang sama berlaku untuk token di `localStorage`: frontend mengakhiri
-> sesi (`POST /keluar`) sebelum menampilkan `#/absen`, jadi perangkat yang
-> ditinggal tidak menyimpan sesi admin.
+> sesi (`POST /keluar`) sebelum membuka `#/absen` di tab baru, jadi perangkat
+> yang ditinggal tidak menyimpan sesi admin.
 
 ### Format response
 

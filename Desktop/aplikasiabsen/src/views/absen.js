@@ -64,6 +64,15 @@ const IKON_MUTAR_KECIL = `
     <path d="M12 3a9 9 0 0 1 9 9" stroke="currentColor" stroke-width="3" stroke-linecap="round" />
   </svg>`;
 
+const IKON_LAYAR_PENUH = `
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"
+       stroke-linecap="round" stroke-linejoin="round" class="size-4" aria-hidden="true">
+    <path d="M4 9V4h5" />
+    <path d="M20 9V4h-5" />
+    <path d="M4 15v5h5" />
+    <path d="M20 15v5h-5" />
+  </svg>`;
+
 // Kolom isian kiosk: sama seperti di layar masuk, tapi lebih tinggi dan
 // berhuruf besar karena dibaca dari jarak satu langkah dari layar.
 const ISIAN = `${KELAS_ISIAN} py-3 text-center text-lg sm:py-4 sm:text-xl`;
@@ -154,6 +163,12 @@ export default {
 
           <span class="flex shrink-0 items-center gap-2">
             <span data-lokasi></span>
+            <button type="button" data-layar-penuh
+                    class="kaca grid size-11 shrink-0 place-items-center rounded-full text-ink
+                           transition duration-200 ease-apple hover:bg-white/90 active:scale-[0.97]"
+                    aria-label="Layar penuh" title="Layar penuh">
+              ${IKON_LAYAR_PENUH}
+            </button>
           </span>
         </header>
 
@@ -177,6 +192,48 @@ export default {
 
     const panggung = akar.querySelector('[data-panggung]');
     const hentikanJam = jamBerjalan(akar.querySelector('[data-jam]'), akar.querySelector('[data-tanggal]'));
+
+    // ── layar penuh ──────────────────────────────────────────────────────────
+    // Peramban hanya mengizinkan layar penuh setelah ada gestur pengguna. Tab
+    // kiosk yang dibuka dari menu belum punya gestur, jadi permintaan otomatis
+    // bisa ditolak; tombol di header jadi jalan cadangannya.
+    const tombolPenuh = akar.querySelector('[data-layar-penuh]');
+
+    function perbaruiTombolPenuh() {
+      if (!tombolPenuh) return;
+      const penuh = Boolean(document.fullscreenElement);
+      const label = penuh ? 'Keluar layar penuh' : 'Layar penuh';
+      tombolPenuh.setAttribute('aria-label', label);
+      tombolPenuh.title = label;
+    }
+
+    async function masukLayarPenuh() {
+      if (!document.fullscreenEnabled || document.fullscreenElement) return;
+      try {
+        await document.documentElement.requestFullscreen();
+      } catch {
+        // Ditolak karena belum ada gestur; tombol di header tetap bisa dipakai.
+      }
+      perbaruiTombolPenuh();
+    }
+
+    async function ubahLayarPenuh() {
+      if (!document.fullscreenEnabled) return;
+      try {
+        if (document.fullscreenElement) await document.exitFullscreen();
+        else await document.documentElement.requestFullscreen();
+      } catch {
+        // Kegagalan layar penuh tidak boleh menghalangi absen.
+      }
+      perbaruiTombolPenuh();
+    }
+
+    if (document.fullscreenEnabled) {
+      tombolPenuh?.addEventListener('click', ubahLayarPenuh);
+      document.addEventListener('fullscreenchange', perbaruiTombolPenuh);
+    } else {
+      tombolPenuh?.remove();
+    }
 
     // ── lokasi perangkat ─────────────────────────────────────────────────────
     //
@@ -939,6 +996,7 @@ export default {
 
     tampilkanSiap();
     muatLokasi();
+    masukLayarPenuh();
 
     // Dipanggil router saat berpindah layar. Kamera yang tidak dimatikan di
     // sini akan tetap menyala dan merekam setelah magang pergi.
@@ -946,6 +1004,8 @@ export default {
       bersihkanTimer();
       bersihkanKamera();
       hentikanJam();
+      document.removeEventListener('fullscreenchange', perbaruiTombolPenuh);
+      if (document.fullscreenElement) document.exitFullscreen().catch(() => {});
     };
   },
 };
