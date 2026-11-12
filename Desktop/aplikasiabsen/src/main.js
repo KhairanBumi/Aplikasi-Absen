@@ -1,5 +1,5 @@
 import './style.css';
-import { pengguna, segarkanSesi } from './api.js';
+import { api, hapusSesi, pengguna, segarkanSesi } from './api.js';
 import { pasangLatar } from './latar.js';
 import { semuaButir } from './menu.js';
 import { animasiHalaman, pengamatMuncul } from './animasi.js';
@@ -135,6 +135,15 @@ async function buka() {
   if (jalur === '#/masuk' && aktif) {
     location.replace(berandaUntuk());
     return;
+  }
+
+  // Kiosk dan dashboard berbagi satu localStorage. Kalau sesi dibiarkan hidup,
+  // orang yang memakai kiosk bisa menekan Back atau membuka #/beranda dan
+  // mendarat di dashboard. Sesi diakhiri dulu, baru kiosk dipasang.
+  if (jalur === '#/absen' && pengguna()) {
+    // Panggilan dimulai sebelum sesi dibersihkan supaya tokennya masih terbaca.
+    api.post('/keluar').catch(() => {});
+    hapusSesi();
   }
 
   bersihkan?.();

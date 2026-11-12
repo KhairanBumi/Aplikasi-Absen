@@ -86,6 +86,10 @@ mengeluarkan orang dari aplikasinya.
 >
 > Satu hal yang perlu diingat kalau memakai cookie: PC kiosk tidak boleh punya
 > cookie sesi siapa pun, karena dipakai bergantian oleh seluruh magang.
+>
+> Aturan yang sama berlaku untuk token di `localStorage`: frontend mengakhiri
+> sesi (`POST /keluar`) sebelum menampilkan `#/absen`, jadi perangkat yang
+> ditinggal tidak menyimpan sesi admin.
 
 ### Format response
 

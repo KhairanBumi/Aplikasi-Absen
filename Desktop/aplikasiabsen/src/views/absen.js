@@ -6,7 +6,7 @@
 // Sebagai gantinya, `POST /kiosk/absen` WAJIB dibatasi di sisi server (hanya
 // dari IP kantor) — lihat PANDUAN-BACKEND.md.
 
-import { api, pengguna, idPerangkat } from '../api.js';
+import { api, idPerangkat } from '../api.js';
 import { esc, jam, jamBerjalan, tampilkanGalat, sembunyikanGalat, KELAS_ISIAN } from '../ui.js';
 import { formatJarak } from '../tabel.js';
 import { pop, coretJalur } from '../animasi.js';
@@ -141,23 +141,9 @@ export default {
       hentikanKamera = null;
     }
 
-    // Tautan kembali hanya muncul kalau ada sesi. PC kiosk tidak punya sesi,
-    // jadi magang tidak melihat apa pun yang bisa ditekan untuk keluar dari
-    // layar absen. Tujuannya halaman pertama masing-masing: magang tidak punya
-    // beranda, jadi mengirimnya ke sana cuma satu lompatan tambahan.
-    const tautanKembali = pengguna()
-      ? `<a href="${pengguna().peran === 'magang' ? '#/riwayat' : '#/beranda'}"
-            aria-label="Kembali"
-            class="kaca flex min-h-11 items-center gap-1.5 rounded-full px-3 py-2 text-sm font-medium text-ink
-                   transition duration-200 ease-apple hover:bg-white/90 active:scale-[0.97]">
-           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9"
-                stroke-linecap="round" stroke-linejoin="round" class="size-4" aria-hidden="true">
-             <path d="M14.5 6.5 9 12l5.5 5.5" />
-           </svg>
-           <span class="hidden sm:inline">Kembali</span>
-         </a>`
-      : '';
-
+    // Kiosk tidak punya tautan keluar. Sesi yang dibawa dari dashboard sudah
+    // diakhiri router sebelum layar ini dipasang, jadi tidak ada jalan kembali
+    // ke dashboard dari perangkat yang ditinggal.
     akar.innerHTML = `
       <main id="isi-utama" tabindex="-1" class="flex min-h-dvh flex-col px-4 py-4 outline-none sm:px-8 sm:py-6">
         <header class="flex shrink-0 items-center justify-between gap-3">
@@ -168,7 +154,6 @@ export default {
 
           <span class="flex shrink-0 items-center gap-2">
             <span data-lokasi></span>
-            ${tautanKembali}
           </span>
         </header>
 

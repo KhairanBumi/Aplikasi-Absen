@@ -20,7 +20,9 @@ perangkat kiosk; pendaftaran dilakukan di sisi server/seed.
 ## Pekerjaan yang selesai
 
 - [x] Rute `#/absen` bersifat publik: dapat dibuka tanpa login dan tidak membuat
-      sesi baru di PC kiosk. Tautan kembali hanya muncul kalau sudah ada sesi.
+      sesi baru di PC kiosk. Sesi yang dibawa dari dashboard diakhiri sebelum
+      kiosk dipasang, dan layar kiosk tidak punya tautan kembali (lihat
+      [M8](M8-kiosk-sesi.md)).
 - [x] Identitas perangkat dibuat sekali di `localStorage`
       (`absen-kiosk-perangkat`) dan dikirim ke server sebagai dasar device
       enrollment.
