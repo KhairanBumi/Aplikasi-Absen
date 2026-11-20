@@ -91,9 +91,9 @@ Batas milestone:
 - [x] Tulis dan luluskan `SayaAbsenDinasTest.php`.
 
 ### Tahap 4 — Backend Persetujuan Admin (TDD)
-- [ ] Buat `AdminAbsenDinasController` (`index`, `setujui`, `tolak`) dengan
+- [x] Buat `AdminAbsenDinasController` (`index`, `setujui`, `tolak`) dengan
       transaksi database (`lockForUpdate`) dan audit log.
-- [ ] Tulis dan luluskan `AdminAbsenDinasTest.php`.
+- [x] Tulis dan luluskan `AdminAbsenDinasTest.php`.
 
 ### Tahap 5 — Frontend Halaman Magang (`#/absen-dinas`)
 - [ ] Daftarkan rute dan menu `#/absen-dinas` (`peran: ['magang']`) di

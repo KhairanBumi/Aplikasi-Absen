@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\AdminAnomaliController;
+use App\Http\Controllers\AdminAbsenDinasController;
 use App\Http\Controllers\AdminAuditController;
 use App\Http\Controllers\AdminDataController;
 use App\Http\Controllers\AdminIzinController;
@@ -41,6 +42,10 @@ Route::middleware(['auth.token', 'admin'])->prefix('admin')->group(function () {
     Route::get('/izin', [AdminIzinController::class, 'index']);
     Route::post('/izin/{id}/setujui', [AdminIzinController::class, 'setujui'])->whereNumber('id');
     Route::post('/izin/{id}/tolak', [AdminIzinController::class, 'tolak'])->whereNumber('id');
+
+    Route::get('/absen-dinas', [AdminAbsenDinasController::class, 'index']);
+    Route::post('/absen-dinas/{id}/setujui', [AdminAbsenDinasController::class, 'setujui'])->whereNumber('id');
+    Route::post('/absen-dinas/{id}/tolak', [AdminAbsenDinasController::class, 'tolak'])->whereNumber('id');
 
     Route::get('/magang', [AdminMagangController::class, 'index']);
     Route::post('/magang', [AdminMagangController::class, 'store']);
