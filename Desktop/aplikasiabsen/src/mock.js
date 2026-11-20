@@ -1883,6 +1883,76 @@ async function tanggapiAsli(metode, jalur, dataKirim, token) {
     return z;
   }
 
+  // ── persetujuan absen dinas luar ─────────────────────────────────────────
+  //
+  // Hanya baris yang punya `keterangan_dinas`. Absen kiosk bermode luar tetap
+  // tidak ikut: yang diminta persetujuan adalah pengajuan mandiri, bukan absen
+  // yang sudah diambil di terminal kantor.
+
+  if (metode === 'GET' && tanpaKueri === '/admin/absen-dinas') {
+    await adminSaja(token);
+    const minta = kueri.has('status') ? kueri.get('status') : 'menunggu';
+
+    if (!['menunggu', 'disetujui', 'ditolak', 'semua'].includes(minta)) {
+      throw galat('Status harus menunggu, disetujui, ditolak, atau semua.', 422, 'status_tidak_valid');
+    }
+
+    const semua = toko.absen.filter((a) => a.keterangan_dinas);
+    const statusDari = (a) => a.status_persetujuan ?? 'disetujui';
+    const hitung = (s) => semua.filter((a) => statusDari(a) === s).length;
+
+    return {
+      data: semua
+        .filter((a) => minta === 'semua' || statusDari(a) === minta)
+        .sort((a, b) => (a.waktu < b.waktu ? 1 : a.waktu > b.waktu ? -1 : b.id - a.id))
+        .map(apiDinas),
+      jumlah: {
+        menunggu: hitung('menunggu'),
+        disetujui: hitung('disetujui'),
+        ditolak: hitung('ditolak'),
+        semua: semua.length,
+      },
+    };
+  }
+
+  const idDinas = /^\/admin\/absen-dinas\/(\d+)\/(setujui|tolak)$/.exec(tanpaKueri);
+  if (metode === 'POST' && idDinas) {
+    const aku = await adminSaja(token);
+    const a = toko.absen.find((x) => x.id === Number(idDinas[1]) && x.keterangan_dinas);
+
+    if (!a) throw galat('Baris absen dinas tidak ditemukan.', 404, 'tidak_ditemukan');
+    if ((a.status_persetujuan ?? 'disetujui') !== 'menunggu') {
+      throw galat('Absen dinas ini sudah diputuskan.', 409, 'sudah_diputuskan');
+    }
+
+    const aksi = idDinas[2];
+    let catatan = null;
+
+    if (aksi === 'tolak') {
+      catatan = String(dataKirim?.catatan ?? '').trim();
+      if (catatan.length < 4 || catatan.length > 500) {
+        throw galat(
+          catatan.length < 4 ? 'Catatan minimal 4 karakter.' : 'Catatan maksimal 500 karakter.',
+          422,
+        );
+      }
+    }
+
+    a.status_persetujuan = aksi === 'setujui' ? 'disetujui' : 'ditolak';
+    a.catatan_admin = catatan;
+    a.diputuskan_at = data.sekarangISO();
+    a.diputuskan_oleh = aku.id;
+
+    catatAudit(aku, aksi === 'setujui' ? 'setujui_absen_dinas' : 'tolak_absen_dinas', {
+      absen_id: a.id,
+      pengguna_id: a.pengguna_id,
+      tipe: a.tipe,
+      tanggal: a.tanggal,
+    });
+
+    return apiDinas(a);
+  }
+
   if (metode === 'GET' && tanpaKueri === '/saya/izin') {
     const aku = await dariToken(token);
     if (!aku) throw galat('Sesi tidak ditemukan. Silakan masuk lagi.', 401, 'sesi_habis');

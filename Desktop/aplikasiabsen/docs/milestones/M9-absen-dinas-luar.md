@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| Status | **Berjalan** |
+| Status | **Selesai** |
 | Lingkup | Keduanya (Backend & Frontend) |
 | Branch | `feat/m9-absen-dinas-luar` |
 | Berkas utama | `KONTRAK-API.md`, `backend/database/migrations/*_add_persetujuan_dinas_to_absen_table.php`, `backend/app/Models/Absen.php`, `backend/app/Http/Controllers/SayaAbsenController.php`, `backend/app/Http/Controllers/AdminAbsenDinasController.php`, `backend/app/Support/Harian.php`, `backend/app/Http/Controllers/DashboardController.php`, `backend/app/Http/Controllers/AdminLaporanController.php`, `backend/routes/api.php`, `src/menu.js`, `src/main.js`, `src/mock.js`, `src/views/absen-dinas.js`, `src/views/absen-dinas-masuk.js` |
@@ -105,13 +105,13 @@ Batas milestone:
 - [x] Tambahkan handler mock endpoint magang di `src/mock.js`.
 
 ### Tahap 6 — Frontend Halaman Admin (`#/absen-dinas-masuk`) & Verifikasi Akhir
-- [ ] Daftarkan rute dan menu `#/absen-dinas-masuk` (`peran: ['admin']`) di
+- [x] Daftarkan rute dan menu `#/absen-dinas-masuk` (`peran: ['admin']`) di
       `src/menu.js` dan `src/main.js`.
-- [ ] Bangun `src/views/absen-dinas-masuk.js` (tab filter status + counter,
+- [x] Bangun `src/views/absen-dinas-masuk.js` (tab filter status + counter,
       tabel responsif & kartu seluler, pratinjau foto selfie, alamat Nominatim +
       jarak + akurasi GPS, serta aksi Setujui & Tolak wajib catatan).
-- [ ] Tambahkan handler mock endpoint admin di `src/mock.js`.
-- [ ] Jalankan seluruh test suite dan build produksi, lalu perbarui status M9.
+- [x] Tambahkan handler mock endpoint admin di `src/mock.js`.
+- [x] Jalankan seluruh test suite dan build produksi, lalu perbarui status M9.
 
 ## Verifikasi
 
@@ -126,13 +126,13 @@ npm run build
 
 ## Kriteria Penerimaan
 
-- [ ] Seluruh pekerjaan dikerjakan di atas branch `feat/m9-absen-dinas-luar` tanpa `git push` otomatis.
-- [ ] Peserta magang dapat melakukan absen masuk/pulang dinas luar dari perangkat sendiri dengan foto live, GPS, dan keterangan dinas.
-- [ ] Peserta magang tidak dapat memanipulasi `pengguna_id` maupun mengakses terminal kiosk admin.
-- [ ] Absen dinas luar otomatis berstatus `menunggu` dan tampil di menu persetujuan admin lengkap dengan foto, alamat Nominatim, akurasi GPS, dan keterangan.
-- [ ] Admin dapat menyetujui atau menolak (wajib isi catatan penolakan), dan keputusan langsung memperbarui rekap harian serta log audit.
-- [ ] Tampilan mematuhi sistem material kaca M7 dan standar kontras/aksesibilitas UI/UX Pro Max (`>= 4.5:1`, target sentuh `>= 44px`, tanpa overflow horizontal).
-- [ ] `php artisan test`, `npm test`, dan `npm run build` lulus tanpa galat.
+- [x] Seluruh pekerjaan dikerjakan di atas branch `feat/m9-absen-dinas-luar` tanpa `git push` otomatis.
+- [x] Peserta magang dapat melakukan absen masuk/pulang dinas luar dari perangkat sendiri dengan foto live, GPS, dan keterangan dinas.
+- [x] Peserta magang tidak dapat memanipulasi `pengguna_id` maupun mengakses terminal kiosk admin.
+- [x] Absen dinas luar otomatis berstatus `menunggu` dan tampil di menu persetujuan admin lengkap dengan foto, alamat Nominatim, akurasi GPS, dan keterangan.
+- [x] Admin dapat menyetujui atau menolak (wajib isi catatan penolakan), dan keputusan langsung memperbarui rekap harian serta log audit.
+- [x] Tampilan mematuhi sistem material kaca M7 dan standar kontras/aksesibilitas UI/UX Pro Max (`>= 4.5:1`, target sentuh `>= 44px`, tanpa overflow horizontal).
+- [x] `php artisan test`, `npm test`, dan `npm run build` lulus tanpa galat.
 
 ## Risiko & Catatan Teknis
 

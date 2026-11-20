@@ -36,16 +36,15 @@ Status per **20 November 2026**.
 | M6 — Hardening, QA & rilis | **Berjalan** | Kebijakan, CI, monitoring, backup, audit/anomali, aksesibilitas, dan uji beban lokal selesai. Uji perangkat kiosk, latihan pemulihan, header staging, dan tanda tangan rilis belum. |
 | M7 — Redesign UI: gradasi Feral & hybrid glass | **Selesai (frontend)** | Gradient terlihat, glass di chrome, kartu ringkasan, dan kartu isi section; tepi bilah atas sejajar dengan kartu. Verifikasi visual Chromium 360–1920 px dengan data mode tiruan; verifikasi admin dengan backend asli belum. |
 | M8 — Kiosk: sesi & layar penuh | **Selesai (frontend)** | Kiosk dibuka di tab baru, sesi dashboard diakhiri, tautan Kembali dihapus, dan layar penuh diminta otomatis. Uji browser dengan mode tiruan; uji perangkat kiosk nyata belum. |
-| M9 — Absen dinas luar & persetujuan admin | **Berjalan** | Tahap 1–5 selesai: branch, kontrak 5 endpoint, migration kolom persetujuan, model `Absen`, endpoint magang, kalkulasi rekap, persetujuan admin, dan layar magang `#/absen-dinas`. Layar admin `#/absen-dinas-masuk` belum. |
+| M9 — Absen dinas luar & persetujuan admin | **Selesai** | Tahap 1–6 selesai: branch, kontrak 5 endpoint, migration kolom persetujuan, model `Absen`, endpoint magang, kalkulasi rekap, persetujuan admin, layar magang `#/absen-dinas`, dan layar admin `#/absen-dinas-masuk`. |
 
 **Kesimpulan:** frontend sudah memuat seluruh layar dan alur sesuai
 `KONTRAK-API.md`, dan M5 sudah lulus uji staging. M7 menyelesaikan poles
 tampilan tanpa mengubah alur, data, atau kesiapan rilis. M8 membuka kiosk di
 tab baru, mengakhiri sesi admin, dan mengembalikan tab dashboard ke login,
-sehingga perangkat yang ditinggal tidak bisa kembali ke dashboard. M9 sudah
-dimulai: jalur absen dinas luar mandiri beserta persetujuan admin sudah
-dikontrakkan, seluruh endpoint backend dan kalkulasi rekap sudah berjalan, dan
-layar magang `#/absen-dinas` sudah tersedia; tinggal layar persetujuan admin.
+sehingga perangkat yang ditinggal tidak bisa kembali ke dashboard. M9
+menyelesaikan jalur absen dinas luar mandiri peserta magang beserta persetujuan
+admin di kedua sisi (backend & frontend).
 Aplikasi **belum siap produksi** karena butir rilis M6 yang tersisa — uji
 perangkat kiosk, latihan pemulihan, header staging, dan tanda tangan — belum
 selesai.

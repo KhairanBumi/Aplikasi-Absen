@@ -54,6 +54,7 @@ const MUAT = {
   '#/beranda': () => import('./views/beranda.js'),
   '#/absen': () => import('./views/absen.js'),
   '#/absen-dinas': () => import('./views/absen-dinas.js'),
+  '#/absen-dinas-masuk': () => import('./views/absen-dinas-masuk.js'),
   '#/izin-masuk': () => import('./views/izin-masuk.js'),
   '#/izin': () => import('./views/izin.js'),
   '#/riwayat': () => import('./views/riwayat.js'),
