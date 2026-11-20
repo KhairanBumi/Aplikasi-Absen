@@ -36,7 +36,7 @@ Status per **20 November 2026**.
 | M6 — Hardening, QA & rilis | **Berjalan** | Kebijakan, CI, monitoring, backup, audit/anomali, aksesibilitas, dan uji beban lokal selesai. Uji perangkat kiosk, latihan pemulihan, header staging, dan tanda tangan rilis belum. |
 | M7 — Redesign UI: gradasi Feral & hybrid glass | **Selesai (frontend)** | Gradient terlihat, glass di chrome, kartu ringkasan, dan kartu isi section; tepi bilah atas sejajar dengan kartu. Verifikasi visual Chromium 360–1920 px dengan data mode tiruan; verifikasi admin dengan backend asli belum. |
 | M8 — Kiosk: sesi & layar penuh | **Selesai (frontend)** | Kiosk dibuka di tab baru, sesi dashboard diakhiri, tautan Kembali dihapus, dan layar penuh diminta otomatis. Uji browser dengan mode tiruan; uji perangkat kiosk nyata belum. |
-| M9 — Absen dinas luar & persetujuan admin | **Berjalan** | Tahap 1 selesai: branch, pendaftaran milestone, dan kontrak 5 endpoint. Implementasi backend dan frontend belum. |
+| M9 — Absen dinas luar & persetujuan admin | **Berjalan** | Tahap 1–2 selesai: branch, kontrak 5 endpoint, migration kolom persetujuan, dan model `Absen`. Implementasi endpoint dan frontend belum. |
 
 **Kesimpulan:** frontend sudah memuat seluruh layar dan alur sesuai
 `KONTRAK-API.md`, dan M5 sudah lulus uji staging. M7 menyelesaikan poles
@@ -124,3 +124,4 @@ Backend ada di `backend/`; langkah instalasi dan seed ada di
 | 12 November 2026 | M8 ditambahkan: sesi admin diakhiri saat kiosk dibuka dan tautan Kembali dihapus, sehingga Back atau `#/beranda` tidak membuka dashboard dari perangkat yang ditinggal. |
 | 12 November 2026 | M8 diperluas: menu Kiosk Absen membuka tab baru, tab dashboard kembali ke login, dan kiosk meminta layar penuh dengan tombol cadangan. |
 | 20 November 2026 | M9 ditambahkan: absen dinas luar mandiri dengan selfie, GPS, keterangan dinas, dan persetujuan admin; kontrak 5 endpoint dan status `menunggu` ditetapkan. |
+| 20 November 2026 | M9 Tahap 2: kolom persetujuan dinas, relasi `pemutus()`, dan `kiosk_id` nullable ditambahkan; test backend lulus. |

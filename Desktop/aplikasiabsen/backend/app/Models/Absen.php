@@ -23,12 +23,19 @@ class Absen extends Model
         'jarak_m' => 'integer',
         'lokasi_meragukan' => 'boolean',
         'telat_menit' => 'integer',
+        'diputuskan_oleh' => 'integer',
+        'diputuskan_at' => 'datetime',
         'created_at' => 'datetime',
     ];
 
     public function pengguna(): BelongsTo
     {
         return $this->belongsTo(Pengguna::class, 'pengguna_id');
+    }
+
+    public function pemutus(): BelongsTo
+    {
+        return $this->belongsTo(Pengguna::class, 'diputuskan_oleh');
     }
 
     public function shift(): BelongsTo

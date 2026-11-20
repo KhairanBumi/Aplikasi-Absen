@@ -78,8 +78,8 @@ Batas milestone:
       pada `KONTRAK-API.md`.
 
 ### Tahap 2 — Skema Database & Model
-- [ ] Buat migration `add_persetujuan_dinas_to_absen_table` dan jalankan migrasi.
-- [ ] Perbarui `App\Models\Absen` (fillable/guarded, casts, relasi `pemutus()`,
+- [x] Buat migration `add_persetujuan_dinas_to_absen_table` dan jalankan migrasi.
+- [x] Perbarui `App\Models\Absen` (fillable/guarded, casts, relasi `pemutus()`,
       dan serializer array API).
 
 ### Tahap 3 — Backend Magang & Kalkulasi Rekap (TDD)
