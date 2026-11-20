@@ -83,12 +83,12 @@ Batas milestone:
       dan serializer array API).
 
 ### Tahap 3 — Backend Magang & Kalkulasi Rekap (TDD)
-- [ ] Implementasikan `SayaAbsenController::store` dan `SayaAbsenController::dinas`
+- [x] Implementasikan `SayaAbsenController::store` dan `SayaAbsenController::dinas`
       (validasi foto, GPS + Nominatim, idempotensi, penanganan kirim ulang saat
       status sebelumnya `ditolak`, serta pencatatan `Audit`).
-- [ ] Sesuaikan `App\Support\Harian::susun()`, `DashboardController`, dan
+- [x] Sesuaikan `App\Support\Harian::susun()`, `DashboardController`, dan
       `AdminLaporanController` terhadap status `menunggu` dan `ditolak`.
-- [ ] Tulis dan luluskan `SayaAbsenDinasTest.php`.
+- [x] Tulis dan luluskan `SayaAbsenDinasTest.php`.
 
 ### Tahap 4 — Backend Persetujuan Admin (TDD)
 - [ ] Buat `AdminAbsenDinasController` (`index`, `setujui`, `tolak`) dengan

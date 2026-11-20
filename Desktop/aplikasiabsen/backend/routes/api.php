@@ -21,6 +21,8 @@ Route::middleware('auth.token')->group(function () {
     Route::post('/keluar', [AuthController::class, 'keluar']);
     Route::get('/saya/profil', [AuthController::class, 'profil']);
     Route::get('/saya/absen', [SayaAbsenController::class, 'index']);
+    Route::post('/saya/absen', [SayaAbsenController::class, 'store']);
+    Route::get('/saya/absen-dinas', [SayaAbsenController::class, 'dinas']);
     Route::get('/saya/izin', [SayaIzinController::class, 'index']);
     Route::post('/saya/izin', [SayaIzinController::class, 'store']);
 });

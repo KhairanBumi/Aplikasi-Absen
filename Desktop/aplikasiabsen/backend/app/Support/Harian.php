@@ -65,7 +65,23 @@ class Harian
             $baris = $absen->get($kunci, collect());
             $masuk = $baris->firstWhere('tipe', 'masuk');
             $pulang = $baris->firstWhere('tipe', 'pulang');
-            $utama = $masuk ?? $pulang;
+
+            // Hanya baris disetujui yang dihitung hadir. Baris menunggu tampil
+            // sebagai status `menunggu`; baris ditolak tidak menghalangi alpha.
+            $sah = $baris->where('status_persetujuan', 'disetujui');
+            $masukSah = $sah->firstWhere('tipe', 'masuk');
+            $pulangSah = $sah->firstWhere('tipe', 'pulang');
+            $utamaSah = $masukSah ?? $pulangSah;
+
+            $menunggu = $baris->where('status_persetujuan', 'menunggu');
+            $utamaMenunggu = $menunggu->firstWhere('tipe', 'masuk') ?? $menunggu->first();
+
+            $ditolak = $baris->where('status_persetujuan', 'ditolak');
+            $utama = $utamaSah
+                ?? $utamaMenunggu
+                ?? $ditolak->firstWhere('tipe', 'masuk')
+                ?? $ditolak->first();
+
             $hariLibur = $libur->get($kunci);
 
             $izinHariIni = $izinHari[$kunci] ?? null;
@@ -76,8 +92,8 @@ class Harian
                 $status = 'libur';
                 $keteranganLibur = $hariLibur?->keterangan
                     ?? ($hari->isSaturday() ? 'Hari Sabtu' : 'Hari Minggu');
-            } elseif ($masuk) {
-                $status = (int) $masuk->telat_menit > 0 ? 'telat' : 'tepat';
+            } elseif ($utamaSah) {
+                $status = (int) ($masukSah?->telat_menit ?? 0) > 0 ? 'telat' : 'tepat';
                 $keteranganLibur = null;
             } elseif ($hari->lt($mulai)) {
                 $status = 'libur';
@@ -87,6 +103,9 @@ class Harian
                 $keteranganLibur = null;
                 $keteranganIzin = $izinHariIni->jenis;
                 $alasanIzin = $izinHariIni->alasan;
+            } elseif ($menunggu->isNotEmpty()) {
+                $status = 'menunggu';
+                $keteranganLibur = null;
             } elseif ($hari->lt($hariIni)) {
                 $status = 'alpha';
                 $keteranganLibur = null;
@@ -103,10 +122,14 @@ class Harian
                 'keterangan_libur' => $keteranganLibur,
                 'masuk' => $masuk?->waktu?->toIso8601String(),
                 'pulang' => $pulang?->waktu?->toIso8601String(),
-                'telat_menit' => (int) ($masuk?->telat_menit ?? 0),
+                'telat_menit' => (int) ($masukSah?->telat_menit ?? 0),
                 'status' => $status,
                 'keterangan_izin' => $keteranganIzin,
                 'alasan_izin' => $alasanIzin,
+                'status_persetujuan' => $utama?->status_persetujuan ?? 'disetujui',
+                'keterangan_dinas' => $utama?->keterangan_dinas,
+                'catatan_admin' => $utama?->catatan_admin,
+                'diputuskan_at' => $utama?->diputuskan_at?->toIso8601String(),
                 'lokasi' => $utama ? ($mode === 'luar' ? 'Dinas luar' : $lokasi) : null,
                 'lokasi_kantor' => $utama ? $lokasi : null,
                 'foto' => $utama?->fotoUrl(),
@@ -129,7 +152,7 @@ class Harian
                 $alpha++;
             }
 
-            $telatMenit += (int) ($masuk?->telat_menit ?? 0);
+            $telatMenit += (int) ($masukSah?->telat_menit ?? 0);
         }
 
         $akhirKerja = $akhir->lt($hariIni) ? $akhir : $hariIni;

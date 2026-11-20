@@ -36,7 +36,7 @@ Status per **20 November 2026**.
 | M6 — Hardening, QA & rilis | **Berjalan** | Kebijakan, CI, monitoring, backup, audit/anomali, aksesibilitas, dan uji beban lokal selesai. Uji perangkat kiosk, latihan pemulihan, header staging, dan tanda tangan rilis belum. |
 | M7 — Redesign UI: gradasi Feral & hybrid glass | **Selesai (frontend)** | Gradient terlihat, glass di chrome, kartu ringkasan, dan kartu isi section; tepi bilah atas sejajar dengan kartu. Verifikasi visual Chromium 360–1920 px dengan data mode tiruan; verifikasi admin dengan backend asli belum. |
 | M8 — Kiosk: sesi & layar penuh | **Selesai (frontend)** | Kiosk dibuka di tab baru, sesi dashboard diakhiri, tautan Kembali dihapus, dan layar penuh diminta otomatis. Uji browser dengan mode tiruan; uji perangkat kiosk nyata belum. |
-| M9 — Absen dinas luar & persetujuan admin | **Berjalan** | Tahap 1–2 selesai: branch, kontrak 5 endpoint, migration kolom persetujuan, dan model `Absen`. Implementasi endpoint dan frontend belum. |
+| M9 — Absen dinas luar & persetujuan admin | **Berjalan** | Tahap 1–3 selesai: branch, kontrak 5 endpoint, migration kolom persetujuan, model `Absen`, endpoint magang, dan kalkulasi rekap. Persetujuan admin dan frontend belum. |
 
 **Kesimpulan:** frontend sudah memuat seluruh layar dan alur sesuai
 `KONTRAK-API.md`, dan M5 sudah lulus uji staging. M7 menyelesaikan poles
@@ -44,7 +44,8 @@ tampilan tanpa mengubah alur, data, atau kesiapan rilis. M8 membuka kiosk di
 tab baru, mengakhiri sesi admin, dan mengembalikan tab dashboard ke login,
 sehingga perangkat yang ditinggal tidak bisa kembali ke dashboard. M9 sudah
 dimulai: jalur absen dinas luar mandiri beserta persetujuan admin sudah
-dikontrakkan, tetapi backend dan frontend-nya belum dikerjakan. Aplikasi **belum siap
+dikontrakkan, endpoint magang dan kalkulasi rekap sudah berjalan, tetapi
+persetujuan admin dan frontend-nya belum dikerjakan. Aplikasi **belum siap
 produksi** karena butir rilis M6 yang tersisa — uji perangkat kiosk, latihan
 pemulihan, header staging, dan tanda tangan — belum selesai.
 
@@ -125,3 +126,4 @@ Backend ada di `backend/`; langkah instalasi dan seed ada di
 | 12 November 2026 | M8 diperluas: menu Kiosk Absen membuka tab baru, tab dashboard kembali ke login, dan kiosk meminta layar penuh dengan tombol cadangan. |
 | 20 November 2026 | M9 ditambahkan: absen dinas luar mandiri dengan selfie, GPS, keterangan dinas, dan persetujuan admin; kontrak 5 endpoint dan status `menunggu` ditetapkan. |
 | 20 November 2026 | M9 Tahap 2: kolom persetujuan dinas, relasi `pemutus()`, dan `kiosk_id` nullable ditambahkan; test backend lulus. |
+| 20 November 2026 | M9 Tahap 3: `POST /saya/absen`, `GET /saya/absen-dinas`, status `menunggu` pada rekap/dashboard/laporan, dan `SayaAbsenDinasTest` (16 tes) lulus; total 177 tes, 1.329 assertion. |
