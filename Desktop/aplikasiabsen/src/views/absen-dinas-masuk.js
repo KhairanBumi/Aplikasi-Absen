@@ -110,6 +110,13 @@ function kartuDinas(r) {
         <span class="inline-flex rounded-full bg-ink/8 px-2.5 py-1 font-medium text-ink/70">
           ${r.tipe === 'masuk' ? 'Masuk' : 'Pulang'}
         </span>
+        ${
+          r.tipe === 'masuk'
+            ? r.telat_menit > 0
+              ? `<span class="inline-flex rounded-full bg-amber-500/15 px-2.5 py-1 font-medium text-amber-800 tabular-nums">Telat ${r.telat_menit}m</span>`
+              : '<span class="inline-flex rounded-full bg-emerald-500/12 px-2.5 py-1 font-medium text-emerald-800">Tepat waktu</span>'
+            : ''
+        }
         <span class="tabular-nums text-muted">${esc(tanggal(r.waktu))} · ${esc(jam(r.waktu))}</span>
       </div>
 
@@ -132,10 +139,10 @@ function kartuDinas(r) {
 }
 
 export default {
-  judul: 'Persetujuan Absen Dinas',
+  judul: 'Persetujuan Dinas',
 
   mount(akar) {
-    const isi = pasangKerangka(akar, { judul: 'Persetujuan Absen Dinas' });
+    const isi = pasangKerangka(akar, { judul: 'Persetujuan Dinas' });
 
     isi.innerHTML = `
       <div class="${KARTU} min-w-0">
@@ -166,12 +173,21 @@ export default {
       },
       {
         judul: 'Waktu',
-        sel: (r) => `
-          <span class="block leading-tight">
-            <span class="block whitespace-nowrap tabular-nums text-ink">${esc(jam(r.waktu))}</span>
-            <span class="block text-xs whitespace-nowrap text-muted">${esc(tanggal(r.waktu))}</span>
-            <span class="mt-1 block text-xs font-medium text-ink/70">${r.tipe === 'masuk' ? 'Masuk' : 'Pulang'}</span>
-          </span>`,
+        sel: (r) => {
+          const statusTelat =
+            r.tipe === 'masuk'
+              ? r.telat_menit > 0
+                ? `<span class="mt-0.5 block text-xs font-medium text-amber-800 tabular-nums">Telat ${r.telat_menit}m</span>`
+                : '<span class="mt-0.5 block text-xs font-medium text-emerald-800">Tepat waktu</span>'
+              : '';
+          return `
+            <span class="block leading-tight">
+              <span class="block whitespace-nowrap tabular-nums text-ink">${esc(jam(r.waktu))}</span>
+              <span class="block text-xs whitespace-nowrap text-muted">${esc(tanggal(r.waktu))}</span>
+              <span class="mt-1 block text-xs font-medium text-ink/70">${r.tipe === 'masuk' ? 'Masuk' : 'Pulang'}</span>
+              ${statusTelat}
+            </span>`;
+        },
       },
       {
         judul: 'Keterangan',
