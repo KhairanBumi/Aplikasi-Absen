@@ -75,7 +75,10 @@ class DashboardController extends Controller
             })
             ->get();
 
-        $masuk = $absenHari->where('tipe', 'masuk')->keyBy('pengguna_id');
+        $masuk = $absenHari
+            ->where('tipe', 'masuk')
+            ->where('status_persetujuan', 'disetujui')
+            ->keyBy('pengguna_id');
 
         $sudahMasuk = $kandidat->filter(fn (Pengguna $p) => $masuk->has($p->id))->values();
 
@@ -97,6 +100,7 @@ class DashboardController extends Controller
 
         $terlambat = $absenHari
             ->where('tipe', 'masuk')
+            ->where('status_persetujuan', 'disetujui')
             ->where('telat_menit', '>', 0)
             ->whereIn('pengguna_id', $idSudahMasuk)
             ->sortByDesc('waktu')
@@ -152,6 +156,7 @@ class DashboardController extends Controller
                 'nip' => $a->pengguna?->nip ?? $a->nip_salinan,
                 'tipe' => $a->tipe,
                 'waktu' => $a->waktu?->toIso8601String(),
+                'status_persetujuan' => $a->status_persetujuan,
                 'foto' => $a->fotoUrl(),
                 'lokasi' => $a->mode === 'luar'
                     ? 'Dinas luar'

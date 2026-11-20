@@ -8,14 +8,12 @@ use App\Models\Lokasi;
 use App\Models\Pengguna;
 use App\Models\PerangkatKiosk;
 use App\Models\PercobaanMasuk;
-use App\Models\Shift;
 use App\Support\Foto;
 use App\Support\Geo;
 use App\Support\Nominatim;
 use Illuminate\Database\QueryException;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
-use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\RateLimiter;
 
@@ -228,14 +226,13 @@ class KioskController extends Controller
         // tetap diterima, lalu ditandai di rekap supaya admin bisa memeriksa.
         // Jarak dari kantor juga tidak pernah dipakai menolak dinas luar.
 
-        $foto = $this->bacaFoto($data['foto']);
+        $foto = Foto::baca($data['foto']);
 
-        if ($foto instanceof JsonResponse) {
-            return $foto;
+        if (isset($foto['kode'])) {
+            return $this->galat($foto['pesan'], $foto['status'], $foto['kode']);
         }
 
-        [$biner, $ekstensi] = $foto;
-        $fotoPath = Foto::simpan($biner, $ekstensi);
+        $fotoPath = Foto::simpan($foto['biner'], $foto['ekstensi']);
 
         $tanggal = now()->toDateString();
 
@@ -294,7 +291,7 @@ class KioskController extends Controller
             : null;
 
         $telat = $tipe === 'masuk'
-            ? $this->hitungTelat($pengguna->shift, now())
+            ? ($pengguna->shift?->telatMenit(now()) ?? 0)
             : 0;
 
         try {
@@ -408,71 +405,6 @@ class KioskController extends Controller
             'alasan' => $alasan,
             'created_at' => now(),
         ]);
-    }
-
-    /** @return array{0: string, 1: string}|JsonResponse */
-    private function bacaFoto(string $foto): array|JsonResponse
-    {
-        if (strlen($foto) > 400_000) {
-            return $this->galat(
-                'Foto terlalu besar. Maksimal 200 KB.',
-                413,
-                'foto_terlalu_besar'
-            );
-        }
-
-        if (! preg_match('#^data:image/(jpeg|png);base64,#', $foto, $cocok)) {
-            return $this->galat(
-                'Foto harus berupa gambar JPEG atau PNG.',
-                422,
-                'foto_tidak_valid'
-            );
-        }
-
-        $biner = base64_decode(substr($foto, strlen($cocok[0])), true);
-
-        if ($biner === false || $biner === '') {
-            return $this->galat('Foto kosong atau rusak.', 422, 'foto_tidak_valid');
-        }
-
-        if (strlen($biner) > (int) config('absensi.foto_max_bytes', 204800)) {
-            return $this->galat(
-                'Foto terlalu besar. Maksimal 200 KB.',
-                413,
-                'foto_terlalu_besar'
-            );
-        }
-
-        $jpeg = substr($biner, 0, 3) === "\xFF\xD8\xFF";
-        $png = substr($biner, 0, 4) === "\x89PNG";
-
-        if (($cocok[1] === 'jpeg' && ! $jpeg) || ($cocok[1] === 'png' && ! $png)) {
-            return $this->galat(
-                'Isi foto tidak cocok dengan format gambar yang dikirim.',
-                422,
-                'foto_tidak_valid'
-            );
-        }
-
-        return [$biner, $cocok[1] === 'png' ? 'png' : 'jpg'];
-    }
-
-    private function hitungTelat(?Shift $shift, Carbon $waktu): int
-    {
-        if (! $shift) {
-            return 0;
-        }
-
-        $masuk = $waktu->copy()->startOfDay()->setTimeFromTimeString($shift->masuk);
-
-        if (strcmp((string) $shift->pulang, (string) $shift->masuk) < 0
-            && $waktu->format('H:i:s') < (string) $shift->pulang) {
-            $masuk->subDay();
-        }
-
-        $batas = $masuk->copy()->addMinutes((int) $shift->toleransi_menit);
-
-        return max(0, intdiv($waktu->getTimestamp() - $batas->getTimestamp(), 60));
     }
 
     private function duplikat(QueryException $e): bool

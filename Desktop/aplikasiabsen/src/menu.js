@@ -36,6 +36,12 @@ export const MENU = [
         ikon: '<path d="M4 8.5V5.8A1.8 1.8 0 0 1 5.8 4H8.5"/><path d="M15.5 4h2.7A1.8 1.8 0 0 1 20 5.8v2.7"/><path d="M20 15.5v2.7a1.8 1.8 0 0 1-1.8 1.8h-2.7"/><path d="M8.5 20H5.8A1.8 1.8 0 0 1 4 18.2v-2.7"/><path d="M8 12h8"/>',
       },
       {
+        jalur: '#/absen-dinas',
+        label: 'Absen Dinas',
+        peran: ['magang'],
+        ikon: '<rect x="3.5" y="7.5" width="17" height="12" rx="2"/><path d="M9 7.5V5.8A1.8 1.8 0 0 1 10.8 4h2.4A1.8 1.8 0 0 1 15 5.8v1.7"/><path d="M3.5 12.5h17"/>',
+      },
+      {
         jalur: '#/riwayat',
         label: 'Riwayat Absen',
         peran: ['magang'],
@@ -52,6 +58,12 @@ export const MENU = [
   {
     bagian: 'Pengajuan',
     butir: [
+      {
+        jalur: '#/absen-dinas-masuk',
+        label: 'Persetujuan Dinas',
+        peran: ['admin'],
+        ikon: '<rect x="3.5" y="7.5" width="17" height="12" rx="2"/><path d="M9 7.5V5.8A1.8 1.8 0 0 1 10.8 4h2.4A1.8 1.8 0 0 1 15 5.8v1.7"/><path d="m8.5 13.5 2.2 2.2 4.8-4.8"/>',
+      },
       {
         jalur: '#/izin-masuk',
         label: 'Persetujuan Izin',

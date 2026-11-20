@@ -39,4 +39,49 @@ class Foto
             Storage::disk('local')->delete($path);
         }
     }
+
+    /**
+     * Baca data URI foto absen. Balasan galat memakai bentuk yang sama dengan
+     * `Controller::galat()` supaya pemanggil tinggal meneruskannya.
+     *
+     * @return array{biner: string, ekstensi: string}|array{status: int, kode: string, pesan: string}
+     */
+    public static function baca(string $foto): array
+    {
+        if (strlen($foto) > 400_000) {
+            return self::galatFoto(413, 'foto_terlalu_besar', 'Foto terlalu besar. Maksimal 200 KB.');
+        }
+
+        if (! preg_match('#^data:image/(jpeg|png);base64,#', $foto, $cocok)) {
+            return self::galatFoto(422, 'foto_tidak_valid', 'Foto harus berupa gambar JPEG atau PNG.');
+        }
+
+        $biner = base64_decode(substr($foto, strlen($cocok[0])), true);
+
+        if ($biner === false || $biner === '') {
+            return self::galatFoto(422, 'foto_tidak_valid', 'Foto kosong atau rusak.');
+        }
+
+        if (strlen($biner) > (int) config('absensi.foto_max_bytes', 204800)) {
+            return self::galatFoto(413, 'foto_terlalu_besar', 'Foto terlalu besar. Maksimal 200 KB.');
+        }
+
+        $jpeg = substr($biner, 0, 3) === "\xFF\xD8\xFF";
+        $png = substr($biner, 0, 4) === "\x89PNG";
+
+        if (($cocok[1] === 'jpeg' && ! $jpeg) || ($cocok[1] === 'png' && ! $png)) {
+            return self::galatFoto(
+                422,
+                'foto_tidak_valid',
+                'Isi foto tidak cocok dengan format gambar yang dikirim.'
+            );
+        }
+
+        return ['biner' => $biner, 'ekstensi' => $cocok[1] === 'png' ? 'png' : 'jpg'];
+    }
+
+    private static function galatFoto(int $status, string $kode, string $pesan): array
+    {
+        return ['status' => $status, 'kode' => $kode, 'pesan' => $pesan];
+    }
 }

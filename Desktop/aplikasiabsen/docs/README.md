@@ -5,7 +5,7 @@ tujuan, pekerjaan yang sudah selesai, status, langkah berikutnya, dan kriteria
 penerimaan. Dokumen ini **tidak menggantikan** `KONTRAK-API.md`; bentuk
 request/response tetap mengikuti kontrak tersebut.
 
-Status per **12 November 2026**.
+Status per **20 November 2026**.
 
 ## Daftar dokumen
 
@@ -20,6 +20,7 @@ Status per **12 November 2026**.
 | [M6 — Hardening, QA & rilis](milestones/M6-hardening-rilis.md) | Keamanan produksi, pengujian menyeluruh, operasional, dan kesiapan rilis. |
 | [M7 — Redesign UI: gradasi Feral & hybrid glass](milestones/M7-redesign-ui-glass.md) | Token material kaca, hero beranda, kontras teks, latar Feral yang terlihat, keselarasan tepi bilah atas dengan kartu isi, dan verifikasi lintas viewport. |
 | [M8 — Kiosk: sesi & layar penuh](milestones/M8-kiosk-sesi.md) | Kiosk dibuka di tab baru, sesi dashboard diakhiri, dan tab kiosk meminta layar penuh. |
+| [M9 — Absen dinas luar & persetujuan admin](milestones/M9-absen-dinas-luar.md) | Absen mandiri peserta magang di luar kantor dengan selfie, GPS, keterangan dinas, dan persetujuan admin. |
 | [Daftar periksa rilis](RILIS.md) | Butir pra-rilis, rilis, pasca-rilis, rollback, dan tanda tangan persetujuan. |
 | [Template milestone](template-milestone.md) | Kerangka untuk menulis milestone atau tugas baru. |
 
@@ -35,14 +36,18 @@ Status per **12 November 2026**.
 | M6 — Hardening, QA & rilis | **Berjalan** | Kebijakan, CI, monitoring, backup, audit/anomali, aksesibilitas, dan uji beban lokal selesai. Uji perangkat kiosk, latihan pemulihan, header staging, dan tanda tangan rilis belum. |
 | M7 — Redesign UI: gradasi Feral & hybrid glass | **Selesai (frontend)** | Gradient terlihat, glass di chrome, kartu ringkasan, dan kartu isi section; tepi bilah atas sejajar dengan kartu. Verifikasi visual Chromium 360–1920 px dengan data mode tiruan; verifikasi admin dengan backend asli belum. |
 | M8 — Kiosk: sesi & layar penuh | **Selesai (frontend)** | Kiosk dibuka di tab baru, sesi dashboard diakhiri, tautan Kembali dihapus, dan layar penuh diminta otomatis. Uji browser dengan mode tiruan; uji perangkat kiosk nyata belum. |
+| M9 — Absen dinas luar & persetujuan admin | **Selesai** | Tahap 1–6 selesai: branch, kontrak 5 endpoint, migration kolom persetujuan, model `Absen`, endpoint magang, kalkulasi rekap, persetujuan admin, layar magang `#/absen-dinas`, dan layar admin `#/absen-dinas-masuk`. |
 
 **Kesimpulan:** frontend sudah memuat seluruh layar dan alur sesuai
 `KONTRAK-API.md`, dan M5 sudah lulus uji staging. M7 menyelesaikan poles
 tampilan tanpa mengubah alur, data, atau kesiapan rilis. M8 membuka kiosk di
 tab baru, mengakhiri sesi admin, dan mengembalikan tab dashboard ke login,
-sehingga perangkat yang ditinggal tidak bisa kembali ke dashboard. Aplikasi **belum siap
-produksi** karena butir rilis M6 yang tersisa — uji perangkat kiosk, latihan
-pemulihan, header staging, dan tanda tangan — belum selesai.
+sehingga perangkat yang ditinggal tidak bisa kembali ke dashboard. M9
+menyelesaikan jalur absen dinas luar mandiri peserta magang beserta persetujuan
+admin di kedua sisi (backend & frontend).
+Aplikasi **belum siap produksi** karena butir rilis M6 yang tersisa — uji
+perangkat kiosk, latihan pemulihan, header staging, dan tanda tangan — belum
+selesai.
 
 ## Arti status
 
@@ -119,3 +124,8 @@ Backend ada di `backend/`; langkah instalasi dan seed ada di
 | 29 Oktober 2026 | M7 direvisi: kartu isi section memakai kaca 0.72 (bukan fill putih), `muted` diganti `ink/70` di seluruh aplikasi, warna aksen disapu ke shade -800, dan tepi bilah atas diselaraskan dengan tepi kartu. Kontras diukur ulang dari piksel aktual pada 360–1920 px. |
 | 12 November 2026 | M8 ditambahkan: sesi admin diakhiri saat kiosk dibuka dan tautan Kembali dihapus, sehingga Back atau `#/beranda` tidak membuka dashboard dari perangkat yang ditinggal. |
 | 12 November 2026 | M8 diperluas: menu Kiosk Absen membuka tab baru, tab dashboard kembali ke login, dan kiosk meminta layar penuh dengan tombol cadangan. |
+| 20 November 2026 | M9 ditambahkan: absen dinas luar mandiri dengan selfie, GPS, keterangan dinas, dan persetujuan admin; kontrak 5 endpoint dan status `menunggu` ditetapkan. |
+| 20 November 2026 | M9 Tahap 2: kolom persetujuan dinas, relasi `pemutus()`, dan `kiosk_id` nullable ditambahkan; test backend lulus. |
+| 20 November 2026 | M9 Tahap 3: `POST /saya/absen`, `GET /saya/absen-dinas`, status `menunggu` pada rekap/dashboard/laporan, dan `SayaAbsenDinasTest` (16 tes) lulus; total 177 tes, 1.329 assertion. |
+| 20 November 2026 | M9 Tahap 4: `GET /admin/absen-dinas`, setujui/tolak dengan `lockForUpdate` dan audit, serta `AdminAbsenDinasTest` (9 tes) lulus; total 186 tes, 1.424 assertion. |
+| 20 November 2026 | M9 Tahap 5: rute `#/absen-dinas`, layar absen dinas magang (GPS, selfie live, antrean offline, riwayat status), dan handler mock magang; `npm test` 24 tes dan `npm run build` lulus. |

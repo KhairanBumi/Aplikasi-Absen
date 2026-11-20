@@ -445,6 +445,13 @@ function riwayatBulan(penggunaId, bulan) {
     const masuk = catatan.find((a) => a.tipe === 'masuk') ?? null;
     const pulang = catatan.find((a) => a.tipe === 'pulang') ?? null;
 
+    // Status diputuskan dari baris yang sudah disetujui saja. Absen dinas luar
+    // yang masih `menunggu` tidak boleh menutupi alpha miliknya sendiri.
+    const sah = catatan.filter((a) => (a.status_persetujuan ?? 'disetujui') === 'disetujui');
+    const masukSah = sah.find((a) => a.tipe === 'masuk') ?? null;
+    const pulangSah = sah.find((a) => a.tipe === 'pulang') ?? null;
+    const adaMenunggu = catatan.some((a) => a.status_persetujuan === 'menunggu');
+
     const izin = toko.izin.find(
       (z) =>
         z.pengguna_id === penggunaId &&
@@ -459,8 +466,9 @@ function riwayatBulan(penggunaId, bulan) {
     // dihitung hadir — bukan dobel sebagai hadir DAN cuti. Rekap bulanan yang
     // menjumlahkan keduanya akan melaporkan angka yang lebih besar daripada
     // jumlah hari kerja, dan itu tidak bisa dijelaskan ke siapa pun.
-    else if (masuk) status = masuk.telat_menit > 0 ? 'telat' : 'tepat';
+    else if (masukSah || pulangSah) status = (masukSah?.telat_menit ?? 0) > 0 ? 'telat' : 'tepat';
     else if (izin) status = izin.jenis;
+    else if (adaMenunggu) status = 'menunggu';
     else status = tgl === hariIniStr ? 'belum' : 'alpha';
 
     baris.push({
@@ -471,8 +479,9 @@ function riwayatBulan(penggunaId, bulan) {
       // ISO untuk kolom lain akan memaksa frontend menebak mana yang mana.
       masuk: masuk?.waktu ?? null,
       pulang: pulang?.waktu ?? null,
-      telat_menit: masuk?.telat_menit ?? 0,
+      telat_menit: masukSah?.telat_menit ?? 0,
       status,
+      status_persetujuan: (masukSah ?? pulangSah ?? catatan[0])?.status_persetujuan ?? 'disetujui',
       keterangan_izin: izin?.jenis ?? null,
       alasan_izin: izin?.alasan ?? null,
       // Label lokasi disusun di sini, bukan di layar: satu tempat untuk dua
@@ -902,6 +911,64 @@ function periksaLibur(isian, { idSendiri = null } = {}) {
 }
 
 /**
+ * Foto selfie dari klien: data URL JPEG/PNG yang memang berisi gambar.
+ *
+ * Label MIME gampang dipalsukan, jadi magic bytes-nya ikut diperiksa. Batas
+ * 3 MB longgar untuk foto kamera yang sudah diperkecil frontend, tetapi tetap
+ * mencegah payload raksasa.
+ */
+function periksaFoto(foto) {
+  const bentuk = /^data:image\/(jpeg|png);base64,/.exec(foto);
+  if (!bentuk) throw galat('Foto wajib disertakan dan harus berupa JPEG atau PNG.', 422);
+
+  let kepala = '';
+  try {
+    kepala = atob(foto.slice(bentuk[0].length, bentuk[0].length + 16));
+  } catch {
+    kepala = '';
+  }
+  const kode = (i) => kepala.charCodeAt(i);
+  const jpeg = kode(0) === 0xff && kode(1) === 0xd8 && kode(2) === 0xff;
+  const png = kode(0) === 0x89 && kode(1) === 0x50 && kode(2) === 0x4e && kode(3) === 0x47;
+  if (!jpeg && !png) throw galat('Berkas foto tidak sah. Ambil ulang fotonya.', 422);
+
+  if (foto.length > 3 * 1024 * 1024) {
+    throw galat('Foto terlalu besar. Ambil ulang dengan resolusi lebih kecil.', 413);
+  }
+}
+
+/** Bentuk satu baris absen dinas luar, sama seperti `Absen::apiArray()`. */
+function apiDinas(a) {
+  const orang = toko.pengguna.find((u) => u.id === a.pengguna_id);
+  return {
+    id: a.id,
+    pengguna_id: a.pengguna_id,
+    nama: orang?.nama ?? a.nama,
+    nip: orang?.nip ?? a.nip,
+    divisi: orang?.divisi ?? null,
+    tanggal: a.tanggal,
+    tipe: a.tipe,
+    waktu: a.waktu,
+    status_persetujuan: a.status_persetujuan ?? 'disetujui',
+    keterangan_dinas: a.keterangan_dinas ?? null,
+    catatan_admin: a.catatan_admin ?? null,
+    diputuskan_at: a.diputuskan_at ?? null,
+    telat_menit: a.telat_menit ?? 0,
+    lokasi_id: a.lokasi_id,
+    lokasi: 'Dinas luar',
+    lokasi_kantor: toko.lokasi.find((l) => l.id === a.lokasi_id)?.nama ?? null,
+    mode: a.mode,
+    lintang: a.lintang,
+    bujur: a.bujur,
+    akurasi: a.akurasi,
+    jarak_m: a.jarak_m,
+    lokasi_teks: a.lokasi_teks,
+    lokasi_meragukan: Boolean(a.lokasi_meragukan),
+    foto: a.foto ?? null,
+  };
+}
+
+/**
  * Penjawab permintaan tiruan yang sebenarnya.
  *
  * Dipisah dari `tanggapi` di bawah cuma supaya penyimpanan ke localStorage
@@ -1041,30 +1108,7 @@ async function tanggapiAsli(metode, jalur, dataKirim, token) {
     lupakanGagal(kunci);
 
     const foto = String(dataKirim?.foto ?? '');
-    const bentukFoto = /^data:image\/(jpeg|png);base64,/.exec(foto);
-    if (!bentukFoto) {
-      throw galat('Foto wajib disertakan dan harus berupa JPEG atau PNG.', 422);
-    }
-    // Label MIME gampang dipalsukan, jadi periksa magic bytes-nya juga.
-    // 12 byte pertama cukup untuk membedakan JPEG dan PNG.
-    let kepala = '';
-    try {
-      kepala = atob(foto.slice(bentukFoto[0].length, bentukFoto[0].length + 16));
-    } catch {
-      kepala = '';
-    }
-    const kode = (i) => kepala.charCodeAt(i);
-    const jpeg = kode(0) === 0xff && kode(1) === 0xd8 && kode(2) === 0xff;
-    const png =
-      kode(0) === 0x89 && kode(1) === 0x50 && kode(2) === 0x4e && kode(3) === 0x47;
-    if (!jpeg && !png) {
-      throw galat('Berkas foto tidak sah. Ambil ulang fotonya.', 422);
-    }
-    // Batas ukuran body/foto. Angka ini longgar untuk foto kamera yang sudah
-    // diperkecil frontend, tapi tetap mencegah payload raksasa.
-    if (foto.length > 3 * 1024 * 1024) {
-      throw galat('Foto terlalu besar. Ambil ulang dengan resolusi lebih kecil.', 413);
-    }
+    periksaFoto(foto);
 
     // Di perusahaan atau di luar. Nilai asing dianggap "kantor": baris absen
     // lama tidak punya kolom ini sama sekali.
@@ -1839,6 +1883,76 @@ async function tanggapiAsli(metode, jalur, dataKirim, token) {
     return z;
   }
 
+  // ── persetujuan absen dinas luar ─────────────────────────────────────────
+  //
+  // Hanya baris yang punya `keterangan_dinas`. Absen kiosk bermode luar tetap
+  // tidak ikut: yang diminta persetujuan adalah pengajuan mandiri, bukan absen
+  // yang sudah diambil di terminal kantor.
+
+  if (metode === 'GET' && tanpaKueri === '/admin/absen-dinas') {
+    await adminSaja(token);
+    const minta = kueri.has('status') ? kueri.get('status') : 'menunggu';
+
+    if (!['menunggu', 'disetujui', 'ditolak', 'semua'].includes(minta)) {
+      throw galat('Status harus menunggu, disetujui, ditolak, atau semua.', 422, 'status_tidak_valid');
+    }
+
+    const semua = toko.absen.filter((a) => a.keterangan_dinas);
+    const statusDari = (a) => a.status_persetujuan ?? 'disetujui';
+    const hitung = (s) => semua.filter((a) => statusDari(a) === s).length;
+
+    return {
+      data: semua
+        .filter((a) => minta === 'semua' || statusDari(a) === minta)
+        .sort((a, b) => (a.waktu < b.waktu ? 1 : a.waktu > b.waktu ? -1 : b.id - a.id))
+        .map(apiDinas),
+      jumlah: {
+        menunggu: hitung('menunggu'),
+        disetujui: hitung('disetujui'),
+        ditolak: hitung('ditolak'),
+        semua: semua.length,
+      },
+    };
+  }
+
+  const idDinas = /^\/admin\/absen-dinas\/(\d+)\/(setujui|tolak)$/.exec(tanpaKueri);
+  if (metode === 'POST' && idDinas) {
+    const aku = await adminSaja(token);
+    const a = toko.absen.find((x) => x.id === Number(idDinas[1]) && x.keterangan_dinas);
+
+    if (!a) throw galat('Baris absen dinas tidak ditemukan.', 404, 'tidak_ditemukan');
+    if ((a.status_persetujuan ?? 'disetujui') !== 'menunggu') {
+      throw galat('Absen dinas ini sudah diputuskan.', 409, 'sudah_diputuskan');
+    }
+
+    const aksi = idDinas[2];
+    let catatan = null;
+
+    if (aksi === 'tolak') {
+      catatan = String(dataKirim?.catatan ?? '').trim();
+      if (catatan.length < 4 || catatan.length > 500) {
+        throw galat(
+          catatan.length < 4 ? 'Catatan minimal 4 karakter.' : 'Catatan maksimal 500 karakter.',
+          422,
+        );
+      }
+    }
+
+    a.status_persetujuan = aksi === 'setujui' ? 'disetujui' : 'ditolak';
+    a.catatan_admin = catatan;
+    a.diputuskan_at = data.sekarangISO();
+    a.diputuskan_oleh = aku.id;
+
+    catatAudit(aku, aksi === 'setujui' ? 'setujui_absen_dinas' : 'tolak_absen_dinas', {
+      absen_id: a.id,
+      pengguna_id: a.pengguna_id,
+      tipe: a.tipe,
+      tanggal: a.tanggal,
+    });
+
+    return apiDinas(a);
+  }
+
   if (metode === 'GET' && tanpaKueri === '/saya/izin') {
     const aku = await dariToken(token);
     if (!aku) throw galat('Sesi tidak ditemukan. Silakan masuk lagi.', 401, 'sesi_habis');
@@ -1940,6 +2054,147 @@ async function tanggapiAsli(metode, jalur, dataKirim, token) {
 
     toko.izin.push(baru);
     return { ...baru, hari_kerja: hariKerja.length };
+  }
+
+  // ── absen dinas luar mandiri ─────────────────────────────────────────────
+  //
+  // Jalur ini hanya untuk magang dan tidak menyentuh perangkat kiosk sama
+  // sekali. Identitas diambil dari token, bukan dari isian klien — sama seperti
+  // backend asli. Baris hasilnya selalu `menunggu` sampai admin memutuskan.
+
+  if (metode === 'GET' && tanpaKueri === '/saya/absen-dinas') {
+    const aku = await dariToken(token);
+    if (!aku) throw galat('Sesi tidak ditemukan. Silakan masuk lagi.', 401, 'sesi_habis');
+    if (!aku.aktif) throw galat('Akun Anda sudah dinonaktifkan.', 403, 'akun_nonaktif');
+    if (aku.peran !== 'magang') throw galat('Halaman ini hanya untuk magang.', 403, 'tidak_berhak');
+
+    return {
+      data: toko.absen
+        .filter((a) => a.pengguna_id === aku.id && a.keterangan_dinas)
+        .sort((a, b) => (a.waktu < b.waktu ? 1 : a.waktu > b.waktu ? -1 : 0))
+        .map(apiDinas),
+    };
+  }
+
+  if (metode === 'POST' && tanpaKueri === '/saya/absen') {
+    const aku = await dariToken(token);
+    if (!aku) throw galat('Sesi tidak ditemukan. Silakan masuk lagi.', 401, 'sesi_habis');
+    if (!aku.aktif) throw galat('Akun Anda sudah dinonaktifkan.', 403, 'akun_nonaktif');
+    if (aku.peran !== 'magang') throw galat('Halaman ini hanya untuk magang.', 403, 'tidak_berhak');
+
+    const foto = String(dataKirim?.foto ?? '');
+    periksaFoto(foto);
+
+    const keterangan = String(dataKirim?.keterangan_dinas ?? '').trim();
+    if (keterangan.length < 4 || keterangan.length > 500) {
+      throw galat('Keterangan dinas harus 4 sampai 500 karakter.', 422);
+    }
+
+    const keAngka = (v) => (v === null || v === undefined || v === '' ? null : Number(v));
+    const lat = keAngka(dataKirim?.lintang);
+    const lon = keAngka(dataKirim?.bujur);
+    if (lat === null || lon === null || !Number.isFinite(lat) || !Number.isFinite(lon)) {
+      throw galat('Lintang dan bujur wajib dikirim berpasangan.', 422, 'koordinat_tidak_lengkap');
+    }
+    if (Math.abs(lat) > 90 || Math.abs(lon) > 180) {
+      throw galat('Koordinat lokasi tidak sah. Ambil ulang lokasinya.', 422);
+    }
+    const akurasiMentah = keAngka(dataKirim?.akurasi);
+    const akurasi = Number.isFinite(akurasiMentah) ? akurasiMentah : null;
+
+    const kunci = dataKirim?.kunci_idempoten ? String(dataKirim.kunci_idempoten) : null;
+
+    if (kunci) {
+      const lama = toko.absen.find((a) => a.pengguna_id === aku.id && a.kunci_idempoten === kunci);
+      if (lama) return { ...apiDinas(lama), idempoten: true };
+
+      if (toko.absen.some((a) => a.pengguna_id !== aku.id && a.kunci_idempoten === kunci)) {
+        throw galat('Kunci idempoten sudah dipakai untuk pengguna lain.', 409, 'kunci_bentrok');
+      }
+    }
+
+    const tanggal = data.tanggalISO(data.hariIni);
+    const aktif = toko.absen.filter(
+      (a) =>
+        a.pengguna_id === aku.id &&
+        a.tanggal === tanggal &&
+        ['menunggu', 'disetujui'].includes(a.status_persetujuan ?? 'disetujui'),
+    );
+    const sudahMasuk = aktif.some((a) => a.tipe === 'masuk');
+    const sudahPulang = aktif.some((a) => a.tipe === 'pulang');
+    if (sudahMasuk && sudahPulang) {
+      throw galat('Anda sudah absen masuk dan pulang hari ini.', 409, 'sudah_absen');
+    }
+
+    const tipe = sudahMasuk ? 'pulang' : 'masuk';
+    const lokasi = toko.lokasi.find((l) => l.id === aku.lokasi_id);
+    if (!lokasi) throw galat('Lokasi kerja Anda belum diatur. Hubungi admin.', 422);
+
+    const putusan = periksaLokasiLuar({ lokasi, lintang: lat, bujur: lon, akurasi });
+    const sekarang = data.bagianJakarta();
+    const giliran = toko.shift.find((s) => s.id === aku.shift_id);
+    const telat =
+      tipe === 'masuk' && giliran
+        ? Math.max(0, sekarang.jam * 60 + sekarang.menit - data.bacaJam(giliran.masuk) - giliran.toleransi_menit)
+        : 0;
+
+    const nilai = {
+      nip: aku.nip,
+      nama: aku.nama,
+      tipe,
+      waktu: data.sekarangISO(),
+      tanggal,
+      lokasi_id: aku.lokasi_id,
+      mode: 'luar',
+      lintang: Number(lat.toFixed(6)),
+      bujur: Number(lon.toFixed(6)),
+      ...putusan,
+      shift_id: aku.shift_id,
+      telat_menit: telat,
+      foto,
+      ip: IP_TIRUAN,
+      user_agent: 'tiruan',
+      kiosk_id: null,
+      kunci_idempoten: kunci,
+      status_persetujuan: 'menunggu',
+      keterangan_dinas: keterangan,
+      catatan_admin: null,
+      diputuskan_oleh: null,
+      diputuskan_at: null,
+      lokasi_teks: await geokodeTerbalik(lat, lon),
+    };
+
+    // Kirim ulang setelah ditolak memperbarui baris yang sama. Tanpa ini,
+    // indeks unik (pengguna, tanggal, tipe) menolak absen kedua di hari yang
+    // sama dan magang tidak punya jalan keluar.
+    const ditolak = toko.absen.find(
+      (a) =>
+        a.pengguna_id === aku.id &&
+        a.tanggal === tanggal &&
+        a.tipe === tipe &&
+        a.status_persetujuan === 'ditolak',
+    );
+
+    let catatan;
+    if (ditolak) {
+      Object.assign(ditolak, nilai);
+      catatan = ditolak;
+    } else {
+      catatan = { id: idBaru(toko.absen), pengguna_id: aku.id, ...nilai };
+      toko.absen.push(catatan);
+    }
+
+    catatAudit(aku, 'absen_dinas_' + tipe, {
+      absen_id: catatan.id,
+      tipe,
+      tanggal,
+      status_persetujuan: 'menunggu',
+      jarak_m: catatan.jarak_m,
+      akurasi: catatan.akurasi,
+      lokasi_meragukan: catatan.lokasi_meragukan,
+    });
+
+    return { ...apiDinas(catatan), idempoten: false };
   }
 
   // ── riwayat absen magang ────────────────────────────────────────────────

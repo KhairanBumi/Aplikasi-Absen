@@ -50,7 +50,7 @@ class AdminLaporanController extends Controller
         $data = $pengguna->map(function (Pengguna $orang) use ($awal, $rinci) {
             $harian = Harian::susun($orang, $awal);
             $hari = collect($harian['data']);
-            $luar = $hari->where('mode', 'luar');
+            $luar = $hari->where('mode', 'luar')->where('status_persetujuan', 'disetujui');
 
             $baris = [
                 'pengguna_id' => $orang->id,

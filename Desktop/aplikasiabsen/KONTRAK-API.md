@@ -334,7 +334,8 @@ Isi layar Beranda untuk admin. Satu panggilan, karena semuanya tampil bersamaan.
       "id": 5646, "nama": "Lukman Hakim", "nip": "MGG038", "tipe": "pulang",
       "waktu": "2026-10-19T15:18:42+07:00", "foto": null,
       "lokasi": "Dinas luar", "lokasi_kantor": "Gudang Cikarang",
-      "mode": "luar", "lintang": -6.284312, "bujur": 107.166041,
+      "mode": "luar", "status_persetujuan": "disetujui",
+      "lintang": -6.284312, "bujur": 107.166041,
       "akurasi": 12, "jarak_m": 34, "lokasi_meragukan": false,
       "lokasi_teks": "Jl. Industri Raya, Cikarang"
     }
@@ -380,6 +381,10 @@ Aturan yang perlu diikuti:
    Pengecualiannya: admin yang memang punya absen atau izin di tanggal itu tetap
    ikut dihitung, supaya angkanya tetap berjumlah pas seperti aturan 2.
 10. Hanya untuk `peran: "admin"`. Selain itu → `403`.
+11. Baris `aktivitas` milik absen dinas membawa `status_persetujuan`. Baris
+    `menunggu` ditampilkan dengan lencana menunggu, tidak menambah
+    `sudah_masuk` maupun `telat`, dan tidak dicap alpha. Baris `ditolak` tidak
+    dihitung hadir; alasan penolakannya ada di antrean admin.
 
 #### `GET /kiosk/lokasi?lokasi=<id>&perangkat=<kiosk_id>`
 
@@ -1095,6 +1100,8 @@ dan `message: "Bulan harus berbentuk YYYY-MM."`.
       "masuk": "2026-10-01T08:43:00+07:00",
       "pulang": "2026-10-01T17:07:00+07:00",
       "telat_menit": 28, "status": "telat",
+      "status_persetujuan": "disetujui",
+      "keterangan_dinas": null, "catatan_admin": null, "diputuskan_at": null,
       "keterangan_izin": null, "alasan_izin": null,
       "lokasi": "Dinas luar", "lokasi_kantor": "Kantor Pusat", "foto": null,
       "mode": "luar", "lintang": -6.224612, "bujur": 106.809441,
@@ -1112,8 +1119,10 @@ dan `message: "Bulan harus berbentuk YYYY-MM."`.
   ke admin.
 - Urutkan **menaik** menurut tanggal. Ini satu-satunya daftar di aplikasi yang
   dibaca dari atas ke bawah sebagai kalender.
-- `status` hanya berisi: `tepat` · `telat` · `izin` · `cuti` · `sakit` ·
-  `alpha` · `libur` · `belum`.
+- `status` hanya berisi: `tepat` · `telat` · `menunggu` · `izin` · `cuti` ·
+  `sakit` · `alpha` · `libur` · `belum`. `menunggu` hanya dipakai untuk hari
+  yang punya absen dinas luar yang belum diputuskan admin; hari itu tidak
+  dihitung `hadir` dan tidak dicap `alpha`.
 - `hari_kerja` dihitung **sejak magang itu masuk kerja**, bukan seluruh bulan.
   Magang yang baru bergabung tanggal 10 tidak punya 13 hari kerja di bulan
   itu, dan memakai angka bulan penuh membuat rekapnya terlihat seperti banyak
@@ -1133,11 +1142,17 @@ dan `message: "Bulan harus berbentuk YYYY-MM."`.
   diperiksa, dan `lokasi_teks` opsional berisi hasil reverse geocoding.
   Baris tanpa absen (izin, libur, alpha) cukup mengirim kolom-kolom ini sebagai
   `null` (kecuali `mode`, kirim `"kantor"`).
+- `status_persetujuan`, `keterangan_dinas`, `catatan_admin`, dan
+  `diputuskan_at` mengikuti baris yang menentukan status hari itu: `disetujui`
+  jika ada, lalu `menunggu`, lalu `ditolak`; jika statusnya sama, baris `masuk`
+  dipakai lebih dulu. Hari tanpa absen dinas memakai
+  `status_persetujuan: "disetujui"` dan tiga kolom lainnya `null`. Aturan
+  lengkapnya ada di bagian **Absen dinas luar**.
 
 **Urutan prioritas status wajib sama persis**, dan urutannya begini:
 
 ```
-libur  >  tepat/telat  >  izin/cuti/sakit  >  belum (hari ini)  >  alpha (hari lewat)
+libur  >  tepat/telat (disetujui)  >  izin/cuti/sakit  >  menunggu  >  belum (hari ini)  >  alpha (hari lewat)
 ```
 
 Absen **di atas** izin. Satu hari kerja tidak boleh terhitung dua kali sebagai
@@ -1151,6 +1166,275 @@ dari hari yang benar-benar berstatus `cuti`**, bukan sekadar dari pengajuan yang
 disetujui. Pengajuan yang disetujui untuk hari yang ternyata ada absen `masuk`
 milik orang itu tidak memotong jatah. Cadangan `menunggu` tetap dihitung sesuai
 aturan kuota di bagian Izin & cuti.
+
+### Absen dinas luar
+
+Absen dinas luar adalah absen mandiri dari perangkat peserta magang, bukan dari
+terminal kiosk. Bedanya dengan `POST /kiosk/absen`:
+
+1. **Identitas diambil dari token**, bukan dari NIP + PIN. Klien tidak boleh
+   mengirim `pengguna_id`, `nip`, atau `pin`; kalau dikirim, nilainya diabaikan.
+2. **Foto, koordinat GPS, dan `keterangan_dinas` wajib.** Baris disimpan dengan
+   `mode: "luar"` dan status awal `menunggu`.
+3. **Admin memutuskan.** Selama `menunggu`, baris belum dihitung hadir, tetapi
+   juga tidak ditandai alpha. Setelah `disetujui`, baris dihitung sebagai
+   kehadiran sah. Setelah `ditolak`, peserta dapat mengirim ulang pada hari dan
+   `tipe` yang sama.
+
+Status persetujuan yang dikenal:
+
+| `status_persetujuan` | Arti | Dampak ke rekap harian |
+|---|---|---|
+| `menunggu` | Belum diperiksa admin | Tampil sebagai `menunggu`; bukan `hadir`, bukan `alpha` |
+| `disetujui` | Diterima admin | Dihitung `tepat`/`telat`; absen `pulang` saja dihitung `tepat` |
+| `ditolak` | Ditolak admin | Tidak dihitung hadir; `catatan_admin` wajib ditampilkan |
+
+Baris kiosk dan data lama yang belum punya kolom ini dianggap `disetujui`.
+
+Yang dimaksud **baris absen dinas** di bagian ini adalah baris yang dibuat lewat
+`POST /saya/absen`, bukan absen kiosk yang kebetulan memakai `mode: "luar"`.
+
+Satu **baris absen dinas** memakai bentuk berikut di seluruh endpoint bagian ini:
+
+```json
+{
+  "id": 145,
+  "pengguna_id": 9,
+  "nama": "Nurul Hidayah",
+  "nip": "MGG009",
+  "divisi": "Perhitungan",
+  "tanggal": "2026-11-20",
+  "tipe": "masuk",
+  "waktu": "2026-11-20T08:12:00+07:00",
+  "status_persetujuan": "menunggu",
+  "keterangan_dinas": "Kunjungan ke vendor di Cikarang.",
+  "catatan_admin": null,
+  "diputuskan_at": null,
+  "telat_menit": 12,
+  "lokasi_id": 1,
+  "lokasi": "Dinas luar",
+  "lokasi_kantor": "Kantor Pusat",
+  "mode": "luar",
+  "lintang": -6.284312,
+  "bujur": 107.166041,
+  "akurasi": 12,
+  "jarak_m": 4370,
+  "lokasi_teks": "Jl. Industri Raya, Cikarang",
+  "lokasi_meragukan": false,
+  "foto": "https://contoh.id/foto/abc?expires=...&signature=..."
+}
+```
+
+- `nama`, `nip`, dan `divisi` diambil dari tabel pengguna lewat relasi, bukan
+  dari salinan di baris absen.
+- `lokasi` selalu `"Dinas luar"`; `lokasi_kantor` adalah nama titik kantor
+  tempat jarak dihitung.
+- `jarak_m` adalah hasil Haversine **saat absen**, bukan dihitung ulang saat
+  daftar dibuka. Boleh `null` kalau titik kantor belum punya koordinat.
+- `foto` adalah URL bertanda tangan yang berlaku sementara. Jangan menyimpan
+  URL ini di `localStorage`; ambil ulang saat daftar dibuka.
+- `catatan_admin` hanya berisi teks pada baris `ditolak`; `diputuskan_at` diisi
+  jam server saat admin memutuskan.
+
+#### `POST /saya/absen`
+
+Hanya untuk `peran: "magang"`. Admin yang memanggil endpoint ini dibalas `403`
+dengan `kode: "tidak_berhak"`.
+
+```json
+// permintaan
+{
+  "foto": "data:image/jpeg;base64,/9j/4AAQ...",
+  "lintang": -6.284312,
+  "bujur": 107.166041,
+  "akurasi": 12,
+  "keterangan_dinas": "Kunjungan ke vendor di Cikarang.",
+  "kunci_idempoten": "8f14e45f-ceea-467f-a1c3-0d3b4f5e6a71"
+}
+```
+
+| Kolom | Aturan |
+|---|---|
+| `foto` | Wajib. Aturan isi, ukuran, dan magic bytes sama persis dengan `POST /kiosk/absen` di bagian **Foto selfie**. |
+| `lintang`, `bujur` | Wajib berpasangan, masing-masing angka sah (−90…90 / −180…180). |
+| `akurasi` | Opsional, angka ≥ 0. Akurasi kasar atau `null` tidak pernah menolak absen; hanya menandai `lokasi_meragukan`. |
+| `keterangan_dinas` | Wajib berupa teks, di-trim, 4–500 karakter. |
+| `kunci_idempoten` | Opsional. 8–80 karakter dari `A-Z`, `a-z`, `0-9`, titik, garis bawah, atau tanda hubung. |
+
+Yang **ditentukan server**, bukan klien:
+
+- `pengguna_id` dari token; `nama_salinan`, `nip_salinan`, `shift_id`, dan
+  `lokasi_id` dari profil pengguna saat itu.
+- `tanggal` dan `waktu` dari jam server. Jangan memakai jam browser.
+- `mode` selalu `"luar"`; `status_persetujuan` selalu `"menunggu"`.
+- `tipe` otomatis:
+  - belum ada baris `masuk` hari itu yang berstatus `menunggu` atau
+    `disetujui` → `masuk`;
+  - sudah ada `masuk`, belum ada `pulang` yang berstatus `menunggu` atau
+    `disetujui` → `pulang`;
+  - keduanya sudah ada → `409` dengan `kode: "sudah_absen"`.
+  Baris `ditolak` **tidak** dihitung saat menentukan `tipe` dan tidak dianggap
+  sudah absen.
+- `telat_menit` dihitung untuk `masuk` memakai shift dan toleransi pengguna,
+  dengan rumus yang sama seperti kiosk. Untuk `pulang`, nilainya `0`.
+- `jarak_m` dihitung dari `lintang`/`bujur` kiriman ke titik
+  `pengguna.lokasi_id`. Jarak tidak pernah dipakai menolak absen.
+- `lokasi_teks` diisi hasil reverse geocoding Nominatim (gratis, maksimal 1
+  permintaan/detik, hasil di-cache). Kalau layanan gagal, kirim `null`; absen
+  tetap diterima.
+- `lokasi_meragukan` bernilai `true` kalau `akurasi` `null` atau lebih dari 50
+  meter, atau ada tanda lain yang layak diperiksa admin.
+
+Aturan idempotensi dan kirim ulang:
+
+- Kunci dicari berdasarkan **pengguna yang sedang masuk** dan
+  `kunci_idempoten`, bukan `kiosk_id`.
+- Kunci yang sama milik pengguna yang sama mengembalikan hasil pertama:
+  `200`, `idempoten: true`, `id` sama, dan tidak ada baris atau foto baru.
+- Kunci yang sama dipakai pengguna lain dibalas `409` dengan
+  `kode: "kunci_bentrok"`. Jangan mengembalikan data absen orang lain.
+- Setelah absen **ditolak**, pengiriman ulang pada hari dan `tipe` yang sama
+  **memperbarui baris yang sama** (id tetap), bukan membuat baris baru. Isi
+  `foto`, GPS, `keterangan_dinas`, dan `waktu` diganti; `status_persetujuan`
+  kembali `menunggu`; `catatan_admin`, `diputuskan_at`, dan `diputuskan_oleh`
+  dikosongkan. Foto lama dihapus setelah pembaruan berhasil. Pengiriman ulang
+  memakai `kunci_idempoten` **baru**; kunci lama tetap mengembalikan baris lama.
+- Baris `menunggu` atau `disetujui` pada `tipe` yang sama tidak boleh dikirim
+  ulang, kecuali kunci idempoten yang sama; balas `409` dengan
+  `kode: "sudah_absen"` dan pesan yang menyebut statusnya.
+
+Balasan `201` untuk baris baru, `200` untuk idempotensi dan kirim ulang.
+Bentuknya satu baris absen dinas ditambah `"idempoten": false` (atau `true`).
+
+Kode galat:
+
+| `kode` | Status | Arti |
+|---|---|---|
+| `tidak_berhak` | `403` | Bukan `peran: "magang"` |
+| `sesi_habis` | `401` | Token tidak ada/tidak valid |
+| `sudah_absen` | `409` | `tipe` yang dituju sudah ada dan berstatus `menunggu`/`disetujui`, atau `masuk` dan `pulang` sudah lengkap |
+| `kunci_bentrok` | `409` | Kunci idempoten sudah dipakai pengguna lain |
+| `koordinat_tidak_lengkap` | `422` | Hanya salah satu dari `lintang`/`bujur` yang dikirim |
+| `foto_tidak_valid` | `422` | Bukan data URI JPEG/PNG, kosong, rusak, atau magic bytes tidak cocok |
+| `foto_terlalu_besar` | `413` | Foto melebihi batas 200 KB setelah di-decode |
+
+Validasi kolom lain mengembalikan `422` dengan `message` dan `errors` Bahasa
+Indonesia, sama seperti endpoint lain. Jangan mengembalikan halaman HTML.
+
+Setiap pengiriman dan kirim ulang dicatat ke audit dengan aksi
+`absen_dinas_masuk` / `absen_dinas_pulang`. Rinciannya memuat `absen_id`,
+`tipe`, `tanggal`, `status_persetujuan`, `jarak_m`, `akurasi`, dan
+`lokasi_meragukan`; jangan pernah menyimpan isi foto, PIN, atau token.
+
+#### `GET /saya/absen-dinas`
+
+Hanya untuk `peran: "magang"`. Mengembalikan **seluruh** pengajuan absen dinas
+milik pengguna yang sedang masuk, termasuk yang masih `menunggu` dan yang
+`ditolak`. Baris absen kiosk tidak ikut.
+
+```json
+{
+  "data": [ /* baris absen dinas, terbaru di atas */ ]
+}
+```
+
+- Urutkan `waktu` menurun, lalu `id` menurun jika waktunya sama.
+- `catatan_admin` **wajib ikut** pada baris `ditolak`; itu satu-satunya tempat
+  peserta membaca alasan penolakan.
+- `foto`, `lintang`, `bujur`, `akurasi`, `jarak_m`, dan `lokasi_teks` ikut
+  supaya peserta bisa memeriksa bukti yang dikirimnya.
+- Daftar kosong tetap `200` dengan `data: []`.
+
+#### `GET /admin/absen-dinas?status=menunggu`
+
+Hanya untuk admin. `status` wajib berupa teks `menunggu` · `disetujui` ·
+`ditolak` · `semua`. Default `menunggu` hanya berlaku jika parameter tidak
+dikirim. Nilai array, kosong, atau teks lain dibalas `422` dengan
+`kode: "status_tidak_valid"` dan
+`message: "Status harus menunggu, disetujui, ditolak, atau semua."`.
+
+```json
+{
+  "data": [ /* baris absen dinas, terbaru di atas */ ],
+  "jumlah": { "menunggu": 6, "disetujui": 20, "ditolak": 1, "semua": 27 }
+}
+```
+
+- `jumlah` menghitung **seluruh** baris absen dinas, bukan hanya yang sedang
+  tersaring dan bukan absen kiosk. Angka ini dipakai tab status.
+- Urutkan terbaru di atas (`waktu` menurun, lalu `id` menurun).
+- Satu baris mewakili satu absen `masuk` atau `pulang`, bukan satu hari.
+- `foto` boleh `null` kalau berkasnya hilang; tampilkan penanda agar admin tahu
+  bukti tidak lengkap.
+- Nama, NIP, dan divisi diambil dari relasi pengguna, bukan salinan baris.
+
+#### `POST /admin/absen-dinas/{id}/setujui` · `POST /admin/absen-dinas/{id}/tolak`
+
+Hanya untuk admin. `id` harus angka; id dengan format tidak sah dibalas `404`,
+bukan `500`. Setujui tidak membutuhkan body. Tolak wajib mengirim catatan:
+
+```json
+// tolak — catatan wajib
+{ "catatan": "Foto tidak menunjukkan lokasi dinas yang dimaksud." }
+```
+
+Berhasil → `200` dengan satu baris absen dinas bentuk yang sama seperti item
+`GET /admin/absen-dinas`.
+
+| `kode` | Status | Arti |
+|---|---|---|
+| `tidak_ditemukan` | `404` | Baris absen dinas dengan id tersebut tidak ada |
+| `sudah_diputuskan` | `409` | Status bukan lagi `menunggu`; keputusan sebelumnya tidak diubah |
+
+Yang wajib ada di server:
+
+- Keputusan hanya sekali dari status `menunggu`. Pengulangan keputusan yang sama
+  maupun pergantian setujui/tolak dibalas `409`; jangan menambah audit kedua.
+- Untuk `tolak`, `catatan` wajib berupa teks yang di-trim sebelum diperiksa
+  panjangnya (4–500 karakter). Kosong, spasi saja, array, dan tipe selain teks
+  ditolak `422` dengan `message` dan `errors.catatan` Bahasa Indonesia.
+- Isi `diputuskan_at` dengan jam server dan `diputuskan_oleh` dari admin pada
+  token. Abaikan metadata keputusan atau pemilik kiriman klien.
+- Kunci baris absen (`lockForUpdate`) dan simpan keputusan bersama audit
+  `setujui_absen_dinas` / `tolak_absen_dinas` dalam **satu transaksi**.
+  Kegagalan audit membatalkan keputusan.
+- Saat menyetujui, kosongkan `catatan_admin`. Saat menolak, simpan catatan yang
+  sudah di-trim.
+- Keputusan langsung memengaruhi rekap pada pembacaan berikutnya; tidak ada
+  cache yang perlu dibersihkan.
+
+#### Dampak ke endpoint yang sudah ada
+
+- `GET /saya/absen`, `GET /admin/laporan`, dan
+  `GET /admin/laporan/harian` menambahkan status `menunggu` pada daftar status
+  yang mungkin. Status ini hanya muncul untuk hari yang punya absen dinas luar
+  yang belum diputuskan.
+- Urutan prioritas status harian menjadi:
+
+  ```text
+  libur  >  tepat/telat (disetujui)  >  izin/cuti/sakit  >  menunggu  >  belum (hari ini)  >  alpha (hari lewat)
+  ```
+
+  `menunggu` menang atas `alpha`, tetapi kalah dari izin yang sudah disetujui.
+  Hari dengan `masuk` disetujui dan `pulang` menunggu tetap berstatus
+  `tepat`/`telat`; status `pulang` yang menunggu terlihat di
+  `GET /saya/absen-dinas` dan antrean admin.
+- Baris harian `GET /saya/absen` dan `GET /admin/laporan/harian` menambahkan
+  `status_persetujuan`, `keterangan_dinas`, `catatan_admin`, dan
+  `diputuskan_at`. Nilainya mengikuti baris yang menentukan status hari itu:
+  baris `disetujui` jika ada, lalu `menunggu`, lalu `ditolak`. Jika statusnya
+  sama, baris `masuk` dipakai lebih dulu. Untuk hari tanpa absen dinas,
+  `status_persetujuan` berisi `"disetujui"` dan tiga kolom lainnya `null`.
+- `GET /admin/dashboard`: baris `aktivitas` milik absen dinas membawa
+  `status_persetujuan`. Hanya baris `disetujui` yang masuk hitungan
+  `sudah_masuk`; baris `menunggu` tidak menambah `sudah_masuk`, tidak menambah
+  `telat`, dan tidak ditandai alpha.
+- `GET /admin/laporan`: `hadir`, `tepat`, `telat`, `luar`, dan `luar_kasar`
+  hanya menghitung baris `disetujui`. Baris `menunggu` tidak menambah `hadir`
+  maupun `alpha`. Baris `ditolak` tidak menambah `hadir`; hari itu menjadi
+  `alpha` jika tidak ada bukti lain.
+- Absen kiosk tidak berubah: `status_persetujuan` default `disetujui`,
+  `keterangan_dinas` dan `catatan_admin` bernilai `null`.
 
 ### Keamanan akun sendiri
 
@@ -1221,10 +1505,10 @@ sendiri.
   ]
   ```
 
-  `status` sama dengan rincian harian: `tepat`, `telat`, `izin`, `cuti`,
-  `sakit`, `alpha`, `libur`, `belum`. Hanya tiga kolom itu yang dikirim —
-  jangan sertakan foto, titik GPS, atau alamat di balasan bulanan. Tanpa
-  `rinci=1`, `harian` tidak ada dan balasannya tetap ringan.
+  `status` sama dengan rincian harian: `tepat`, `telat`, `menunggu`, `izin`,
+  `cuti`, `sakit`, `alpha`, `libur`, `belum`. Hanya tiga kolom itu yang
+  dikirim — jangan sertakan foto, titik GPS, atau alamat di balasan bulanan.
+  Tanpa `rinci=1`, `harian` tidak ada dan balasannya tetap ringan.
 - `hari_kerja` di akar response = jumlah hari kerja **di bulan itu** (13 untuk
   Oktober sampai tanggal 19). Itu **bukan** penyebut kartu "Kehadiran" di layar:
   kartu itu menjumlahkan `hari_kerja` tiap baris, karena `hadir` juga
@@ -1241,9 +1525,10 @@ sendiri.
 - `ringkasan.izin` = jumlah `izin` + `cuti` + `sakit` dari seluruh baris. Ini
   pengecualian dari aturan "jangan digabung": untuk satu angka besar di kartu
   ringkasan, yang dibaca cuma "berapa hari orang tidak masuk".
-- `luar` = jumlah hari dengan absen `mode: "luar"` pada bulan itu.
-  `luar_kasar` = berapa di antaranya berakurasi GPS rendah
-  (`lokasi_meragukan` atau `akurasi > 50`). Kolom ini dipakai layar rekap untuk
+- `luar` = jumlah hari dengan absen `mode: "luar"` berstatus `disetujui` pada
+  bulan itu. `luar_kasar` = berapa di antaranya berakurasi GPS rendah
+  (`lokasi_meragukan` atau `akurasi > 50`). Absen dinas yang masih `menunggu`
+  atau `ditolak` tidak dihitung. Kolom ini dipakai layar rekap untuk
   menunjukkan siapa yang perlu dibuka rinciannya; rincian harian tetap yang
   memuat titik dan tautan petanya.
 - Ukurannya 50 orang × 1 bulan. Aman dihitung saat permintaan datang. Kalau
