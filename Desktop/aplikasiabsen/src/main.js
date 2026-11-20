@@ -53,6 +53,7 @@ const MUAT = {
   '#/masuk': () => import('./views/masuk.js'),
   '#/beranda': () => import('./views/beranda.js'),
   '#/absen': () => import('./views/absen.js'),
+  '#/absen-dinas': () => import('./views/absen-dinas.js'),
   '#/izin-masuk': () => import('./views/izin-masuk.js'),
   '#/izin': () => import('./views/izin.js'),
   '#/riwayat': () => import('./views/riwayat.js'),

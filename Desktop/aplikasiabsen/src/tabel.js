@@ -167,6 +167,7 @@ const WARNA_ABSEN = {
   alpha: 'bg-rose-500/15 text-rose-800',
   libur: 'bg-ink/8 text-ink/70',
   belum: 'bg-ink/8 text-ink/70',
+  menunggu: 'bg-amber-500/15 text-amber-800',
 };
 
 const LABEL_ABSEN = {
@@ -181,6 +182,7 @@ const LABEL_ABSEN = {
   alpha: 'Tanpa kabar',
   libur: 'Libur',
   belum: 'Belum absen',
+  menunggu: 'Menunggu',
 };
 
 const WARNA_PENGAJUAN = {

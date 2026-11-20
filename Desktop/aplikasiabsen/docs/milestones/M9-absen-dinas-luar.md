@@ -96,13 +96,13 @@ Batas milestone:
 - [x] Tulis dan luluskan `AdminAbsenDinasTest.php`.
 
 ### Tahap 5 — Frontend Halaman Magang (`#/absen-dinas`)
-- [ ] Daftarkan rute dan menu `#/absen-dinas` (`peran: ['magang']`) di
+- [x] Daftarkan rute dan menu `#/absen-dinas` (`peran: ['magang']`) di
       `src/menu.js` dan `src/main.js`.
-- [ ] Bangun `src/views/absen-dinas.js` (status sesi hari ini, GPS otomatis
+- [x] Bangun `src/views/absen-dinas.js` (status sesi hari ini, GPS otomatis
       `src/lokasi.js`, input `keterangan_dinas`, kamera selfie live
       `src/kamera.js` dengan pembersihan track aman, antrean offline
       `localStorage` + `kunci_idempoten`, serta riwayat status persetujuan).
-- [ ] Tambahkan handler mock endpoint magang di `src/mock.js`.
+- [x] Tambahkan handler mock endpoint magang di `src/mock.js`.
 
 ### Tahap 6 — Frontend Halaman Admin (`#/absen-dinas-masuk`) & Verifikasi Akhir
 - [ ] Daftarkan rute dan menu `#/absen-dinas-masuk` (`peran: ['admin']`) di
